@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vercel/
+.env
+.env.*
+!.env.example
+backend/data/
+backend/.env
+backend/secrets/
+**/__pycache__/
+.DS_Store
+*.log
