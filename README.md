@@ -8,7 +8,7 @@
 
 **No paid AI API credits. A dark React workspace. Your own local video engine.**
 
-[Explore the interface](https://peakcut-studio-chi.vercel.app/) · [Get started](#quick-start) · [Feature coverage](FEATURE-PARITY.md) · [Original PeakCut](https://github.com/haziqahmedqasmi/PeakCut)
+[Explore the interface](https://peakcut-studio-chi.vercel.app/) · [Watch the 40-second demo](https://github.com/sasukefrontenddev/peakcut-studio/releases/download/v1.0.0-studio/PeakCut-Studio-Instagram-Reel.mp4) · [Get started](#quick-start) · [Feature coverage](FEATURE-PARITY.md) · [Original PeakCut](https://github.com/haziqahmedqasmi/PeakCut)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-aebc91?style=flat-square)](LICENSE)
 [![Local AI](https://img.shields.io/badge/AI-Local%20Ollama-f18a72?style=flat-square)](#local-ai-setup)
