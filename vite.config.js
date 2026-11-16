@@ -7,8 +7,14 @@ export default defineConfig({
       output: {
         codeSplitting: {
           groups: [
-            { name: 'react', test: /node_modules\/(react|react-dom|scheduler)\// },
-            { name: 'animation', test: /node_modules\/(motion|framer-motion|motion-dom|motion-utils|gsap)\// },
+            {
+              name: "react",
+              test: /node_modules\/(react|react-dom|scheduler)\//,
+            },
+            {
+              name: "animation",
+              test: /node_modules\/(motion|framer-motion|motion-dom|motion-utils|gsap)\//,
+            },
           ],
         },
       },

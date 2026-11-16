@@ -47,7 +47,19 @@ import {
 import AnimatedContent from "./components/reactbits/AnimatedContent";
 import SpotlightCard from "./components/reactbits/SpotlightCard";
 import CountUp from "./components/reactbits/CountUp";
-import { api, send, upload } from "./api";
+import {
+  api,
+  send,
+  upload,
+  engineUrl,
+  fullStudioUrl,
+  localEngineRoute,
+  downloadClip,
+  getEngineToken,
+  setEngineToken,
+  pairingOrigin,
+  fetchClip,
+} from "./api";
 
 const nav = [
   { id: "home", label: "Overview", icon: Home },
@@ -223,7 +235,13 @@ export default function App() {
       setOverview(ov);
       setConnection("online");
     } catch (e) {
-      setConnection(e.status === 401 ? "signin" : "offline");
+      setConnection(
+        e.status === 428 || (import.meta.env.PROD && e.status === 401)
+          ? "pair"
+          : e.status === 401
+            ? "signin"
+            : "offline",
+      );
     }
   }, []);
   useEffect(() => {
@@ -246,6 +264,45 @@ export default function App() {
     document.addEventListener("keydown", fn);
     return () => document.removeEventListener("keydown", fn);
   }, []);
+  useEffect(() => {
+    const listener = (event) => {
+      if (
+        event.origin !== pairingOrigin ||
+        event.source !== window.opener ||
+        event.data?.type !== "peakcut-engine-pair"
+      )
+        return;
+      try {
+        setEngineToken(event.data.token);
+        window.history.replaceState(null, "", "/");
+        refresh();
+        notify(
+          "This browser is connected to your computer. Your videos stay local.",
+        );
+      } catch {
+        notify(
+          "The pairing key was not valid. Open the local engine and try again.",
+        );
+      }
+    };
+    const storage = (event) => {
+      if (event.key === "peakcut-engine-pair-v1") refresh();
+    };
+    window.addEventListener("message", listener);
+    window.addEventListener("storage", storage);
+    if (
+      new URLSearchParams(window.location.search).has("connect-local") &&
+      window.opener
+    )
+      window.opener.postMessage(
+        { type: "peakcut-studio-ready" },
+        pairingOrigin,
+      );
+    return () => {
+      window.removeEventListener("message", listener);
+      window.removeEventListener("storage", storage);
+    };
+  }, [refresh, notify]);
   const changeView = (id) => {
     setView(id);
     setQuery("");
@@ -492,6 +549,23 @@ export default function App() {
               exit={reduced ? {} : { opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
+              {connection === "pair" && (
+                <div className="connection-banner">
+                  <MonitorPlay size={16} />
+                  <span>
+                    Connect this browser to your computer. Your videos stay
+                    local.
+                  </span>
+                  <a
+                    className="text-button"
+                    href={pairingOrigin}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Connect engine <ArrowUpRight size={13} />
+                  </a>
+                </div>
+              )}
               {connection === "offline" && (
                 <div className="connection-banner">
                   <Cloud size={16} />
@@ -513,7 +587,18 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {status?.disk_full && <div className="connection-banner" role="alert"><Cloud size={16}/><span>The video engine needs more storage before it can accept videos.</span><button onClick={() => changeView("settings")}>Storage <ArrowRight size={13}/></button></div>}
+              {status?.disk_full && (
+                <div className="connection-banner" role="alert">
+                  <Cloud size={16} />
+                  <span>
+                    This computer needs more free space before it can accept
+                    videos.
+                  </span>
+                  <button onClick={() => changeView("settings")}>
+                    Storage <ArrowRight size={13} />
+                  </button>
+                </div>
+              )}
               {view === "home" && (
                 <>
                   <div className="page-heading">
@@ -993,10 +1078,10 @@ export default function App() {
                     className={`status-dot ${["online", "signin"].includes(connection) ? "online" : ""}`}
                   />
                   {["online", "signin"].includes(connection)
-                    ? "Video engine connected"
+                    ? "Local engine connected"
                     : connection === "loading"
                       ? "Connecting to video engine"
-                      : "Video engine offline"}
+                      : "Local engine offline"}
                   <span className="footer-sep">/</span>PeakCut Studio
                 </span>
               </footer>
@@ -1077,6 +1162,15 @@ export default function App() {
             )}{" "}
             {modal.type === "help" && (
               <div className="help-steps">
+                <div className="subtle-note">
+                  <MonitorPlay size={18} />
+                  <p>
+                    First, open <strong>Start PeakCut Engine.command</strong> on
+                    this computer and keep its window running. If your browser
+                    asks, allow this site to connect to your local network.
+                    Videos stay on this computer.
+                  </p>
+                </div>
                 {[
                   [
                     "01",
@@ -1603,7 +1697,52 @@ function CreatorForm({ onDone }) {
   );
 }
 
+function ClipPlayer({ path }) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const asset = useRef("");
+  const abort = useRef(null);
+  useEffect(
+    () => () => {
+      abort.current?.abort();
+      if (asset.current) URL.revokeObjectURL(asset.current);
+    },
+    [],
+  );
+  async function play() {
+    setBusy(true);
+    setError("");
+    abort.current = new AbortController();
+    try {
+      const blob = await fetchClip(path, abort.current.signal);
+      asset.current = URL.createObjectURL(blob);
+      setUrl(asset.current);
+    } catch (e) {
+      if (e.name !== "AbortError") setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return url ? (
+    <video src={url} controls autoPlay playsInline />
+  ) : (
+    <div className="clip-preview">
+      <Button variant="outline" onClick={play} disabled={busy}>
+        {busy ? (
+          <LoaderCircle size={18} className="spin" />
+        ) : (
+          <Play size={18} />
+        )}{" "}
+        {busy ? "Loading clip…" : "Preview clip"}
+      </Button>
+      {error && <p role="alert">{error}</p>}
+    </div>
+  );
+}
+
 function JobDetails({ job }) {
+  const [downloadError, setDownloadError] = useState("");
   const ready = (job.clips || []).filter((c) => c.status === "done");
   return (
     <div className="job-detail">
@@ -1622,15 +1761,17 @@ function JobDetails({ job }) {
         <span>{job.stage}</span>
       </div>
       {job.error && <p className="form-error">{job.error}</p>}
+      {downloadError && (
+        <p className="form-error" role="alert">
+          {downloadError}
+        </p>
+      )}
       {ready.length ? (
         <div className="clips-grid">
           {ready.map((c) => (
             <div className="clip-card" key={c.id}>
-              <video
-                controls
-                playsInline
-                preload="metadata"
-                src={`/media/${job.id}/${c.file || c.filename || c.id + ".mp4"}`}
+              <ClipPlayer
+                path={`/media/${job.id}/${c.file || c.filename || c.id + ".mp4"}`}
               />
               <div>
                 <h3>{c.title || c.hook || "Your highlight"}</h3>
@@ -1639,14 +1780,18 @@ function JobDetails({ job }) {
                   <span> · </span>
                   {c.score ? `${c.score} score` : "Ready to share"}
                 </p>
-                <a
-                  className="button outline"
-                  href={`/media/${job.id}/${c.file || c.filename || c.id + ".mp4"}?download=1`}
-                  download
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    downloadClip(
+                      `/media/${job.id}/${c.file || c.filename || c.id + ".mp4"}?download=1`,
+                      c.file || c.filename || "peakcut-clip.mp4",
+                    ).catch((err) => setDownloadError(err.message))
+                  }
                 >
                   <Download size={15} />
                   Download clip
-                </a>
+                </Button>
               </div>
             </div>
           ))}
@@ -1810,127 +1955,140 @@ function SettingsPage({
                   uses loudness to find highlights.
                 </p>
               </div>
-              {status?.accounts && !status?.user?.is_admin ? <div className="subtle-note"><Users size={17}/><p>AI settings are managed by your workspace administrator. You can still create clips without an AI key once the video engine is ready.</p></div> : <form
-                className="simple-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  action(async () => {
-                    await send("/ai", ai, "PUT");
-                    setAi((a) => ({ ...a, key: "" }));
-                    await send("/ai/test", {});
-                    notify(
-                      "AI connected and tested. Ready to find your best moments.",
-                    );
-                  });
-                }}
-              >
-                <label className="field">
-                  AI provider
-                  <select
-                    value={ai.provider}
-                    onChange={(e) => {
-                      setModels([]);
-                      setAi({ ...ai, provider: e.target.value, models: "" });
-                    }}
-                  >
-                    {[
-                      ["gemini", "Google Gemini"],
-                      ["openai", "OpenAI"],
-                      ["anthropic", "Anthropic Claude"],
-                      ["groq", "Groq"],
-                      ["openrouter", "OpenRouter"],
-                      ["xai", "Grok (xAI)"],
-                      ["ollama", "Ollama · Local"],
-                      ["custom", "Custom · OpenAI compatible"],
-                    ].map(([k, v]) => (
-                      <option value={k} key={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  API key
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    placeholder={
-                      savedAi?.has_key
-                        ? "Key saved · leave blank to keep it"
-                        : "Paste your provider’s API key"
-                    }
-                    value={ai.key}
-                    onChange={(e) => setAi({ ...ai, key: e.target.value })}
-                  />
-                </label>
-                {["custom", "ollama"].includes(ai.provider) && (
+              {status?.accounts && !status?.user?.is_admin ? (
+                <div className="subtle-note">
+                  <Users size={17} />
+                  <p>
+                    AI settings are managed by your workspace administrator. You
+                    can still create clips without an AI key once the video
+                    engine is ready.
+                  </p>
+                </div>
+              ) : (
+                <form
+                  className="simple-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    action(async () => {
+                      await send("/ai", ai, "PUT");
+                      setAi((a) => ({ ...a, key: "" }));
+                      await send("/ai/test", {});
+                      notify(
+                        "AI connected and tested. Ready to find your best moments.",
+                      );
+                    });
+                  }}
+                >
                   <label className="field">
-                    Base URL
+                    AI provider
+                    <select
+                      value={ai.provider}
+                      onChange={(e) => {
+                        setModels([]);
+                        setAi({ ...ai, provider: e.target.value, models: "" });
+                      }}
+                    >
+                      {[
+                        ["gemini", "Google Gemini"],
+                        ["openai", "OpenAI"],
+                        ["anthropic", "Anthropic Claude"],
+                        ["groq", "Groq"],
+                        ["openrouter", "OpenRouter"],
+                        ["xai", "Grok (xAI)"],
+                        ["ollama", "Ollama · Local"],
+                        ["custom", "Custom · OpenAI compatible"],
+                      ].map(([k, v]) => (
+                        <option value={k} key={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    API key
                     <input
-                      type="url"
-                      placeholder="https://your-provider.example/v1"
-                      value={ai.base_url || ""}
-                      onChange={(e) =>
-                        setAi({ ...ai, base_url: e.target.value })
+                      type="password"
+                      autoComplete="off"
+                      placeholder={
+                        savedAi?.has_key
+                          ? "Key saved · leave blank to keep it"
+                          : "Paste your provider’s API key"
                       }
+                      value={ai.key}
+                      onChange={(e) => setAi({ ...ai, key: e.target.value })}
                     />
                   </label>
-                )}
-                <label className="field">
-                  Model
-                  <div className="model-row">
-                    <input
-                      list="available-models"
-                      placeholder="Find models or enter a model ID"
-                      value={
-                        Array.isArray(ai.models)
-                          ? ai.models.join(", ")
-                          : ai.models || ""
-                      }
-                      onChange={(e) => setAi({ ...ai, models: e.target.value })}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() =>
-                        action(async () => {
-                          const d = await send("/ai/models", ai);
-                          setModels(d.models || []);
-                          notify(
-                            "Available models loaded. Choose one in the model field.",
-                          );
-                        })
-                      }
-                    >
-                      Find models
+                  {["custom", "ollama"].includes(ai.provider) && (
+                    <label className="field">
+                      Base URL
+                      <input
+                        type="url"
+                        placeholder="https://your-provider.example/v1"
+                        value={ai.base_url || ""}
+                        onChange={(e) =>
+                          setAi({ ...ai, base_url: e.target.value })
+                        }
+                      />
+                    </label>
+                  )}
+                  <label className="field">
+                    Model
+                    <div className="model-row">
+                      <input
+                        list="available-models"
+                        placeholder="Find models or enter a model ID"
+                        value={
+                          Array.isArray(ai.models)
+                            ? ai.models.join(", ")
+                            : ai.models || ""
+                        }
+                        onChange={(e) =>
+                          setAi({ ...ai, models: e.target.value })
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() =>
+                          action(async () => {
+                            const d = await send("/ai/models", ai);
+                            setModels(d.models || []);
+                            notify(
+                              "Available models loaded. Choose one in the model field.",
+                            );
+                          })
+                        }
+                      >
+                        Find models
+                      </Button>
+                    </div>
+                    <datalist id="available-models">
+                      {models.map((m) => (
+                        <option
+                          key={typeof m === "string" ? m : m.id}
+                          value={typeof m === "string" ? m : m.id}
+                        />
+                      ))}
+                    </datalist>
+                  </label>
+                  {error && (
+                    <p className="form-error" role="alert">
+                      {error}
+                    </p>
+                  )}
+                  <div>
+                    <Button type="submit" disabled={busy}>
+                      {busy ? (
+                        <LoaderCircle className="spin" size={16} />
+                      ) : (
+                        <Check size={16} />
+                      )}
+                      Save & test connection
                     </Button>
                   </div>
-                  <datalist id="available-models">
-                    {models.map((m) => (
-                      <option
-                        key={typeof m === "string" ? m : m.id}
-                        value={typeof m === "string" ? m : m.id}
-                      />
-                    ))}
-                  </datalist>
-                </label>
-                {error && (
-                  <p className="form-error" role="alert">
-                    {error}
-                  </p>
-                )}
-                <div>
-                  <Button type="submit" disabled={busy}>
-                    {busy ? (
-                      <LoaderCircle className="spin" size={16} />
-                    ) : (
-                      <Check size={16} />
-                    )}
-                    Save & test connection
-                  </Button>
-                </div>
-              </form>}
+                </form>
+              )}
             </>
           )}
           {tab === "apps" && (
@@ -1965,7 +2123,10 @@ function SettingsPage({
                     </p>
                   </div>
                   {status?.connect?.[p] ? (
-                    <a className="button outline" href={`/oauth/${p}/start`}>
+                    <a
+                      className="button outline"
+                      href={localEngineRoute(`/oauth/${p}/start`)}
+                    >
                       Connect <ArrowUpRight size={14} />
                     </a>
                   ) : (
@@ -1987,7 +2148,7 @@ function SettingsPage({
                 </span>
                 <div>
                   <h2>Room for your next big idea.</h2>
-                  <p>Your files live with the video engine.</p>
+                  <p>Videos, clips, and your AI key stay on this computer.</p>
                 </div>
               </div>
               <div className="detail-row">
@@ -2065,7 +2226,13 @@ function SettingsPage({
                   </Button>
                 )
               )}
-              <a className="button outline" href="/app" style={{marginTop: 24}}>Open full editing workspace <ArrowUpRight size={15}/></a>
+              <a
+                className="button outline"
+                href={fullStudioUrl}
+                style={{ marginTop: 24 }}
+              >
+                Open full editing workspace <ArrowUpRight size={15} />
+              </a>
               <a
                 className="source-link"
                 href="https://github.com/haziqahmedqasmi/PeakCut"

@@ -3206,4 +3206,28 @@ footer img {
   }
 }
 
-@media (max-width: 680px) { .sidebar { visibility: hidden; } .menu-open .sidebar { visibility: visible; } }
+@media (max-width: 680px) {
+  .sidebar {
+    visibility: hidden;
+  }
+  .menu-open .sidebar {
+    visibility: visible;
+  }
+}
+
+.clip-preview {
+  aspect-ratio: 9/16;
+  background: linear-gradient(145deg, #6f7f5a, #313b27);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 25px;
+  gap: 15px;
+  color: #e2ecd2;
+}
+.clip-preview p {
+  font-size: 11px;
+  line-height: 1.8;
+  text-align: center;
+}
