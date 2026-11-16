@@ -217,6 +217,7 @@ export default function App() {
   const [data, setData] = useState({ jobs: [], creators: [], accounts: [] });
   const [overview, setOverview] = useState(null);
   const [connection, setConnection] = useState("loading");
+  const [connectionError, setConnectionError] = useState("");
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState("");
   const [query, setQuery] = useState("");
@@ -234,7 +235,9 @@ export default function App() {
       setData(sync);
       setOverview(ov);
       setConnection("online");
+      setConnectionError("");
     } catch (e) {
+      setConnectionError(e.message);
       setConnection(
         e.status === 428 || (import.meta.env.PROD && e.status === 401)
           ? "pair"
@@ -570,8 +573,7 @@ export default function App() {
                 <div className="connection-banner">
                   <Cloud size={16} />
                   <span>
-                    The video server isn’t connected yet. Your studio is ready
-                    when it is.
+                    {connectionError || "Start PeakCut Engine on this computer to connect your videos."}
                   </span>
                   <button onClick={refresh}>
                     Retry <RefreshCw size={13} />

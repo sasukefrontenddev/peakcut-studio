@@ -49,6 +49,7 @@ export async function api(path, options = {}) {
   if (import.meta.env.PROD && !getEngineToken())
     throw new ApiError("Connect this browser to your local engine first.", 428);
   const res = await fetch(engineUrl("/api" + path), {
+    signal: AbortSignal.timeout(["/status", "/sync", "/overview"].includes(path) ? 10000 : 60000),
     credentials: import.meta.env.PROD ? "omit" : "same-origin",
     ...options,
     headers: {
@@ -58,6 +59,9 @@ export async function api(path, options = {}) {
         : {}),
       ...options.headers,
     },
+  }).catch(error => {
+    if (error.name === "AbortError" && options.signal?.aborted) throw error;
+    throw new ApiError("Your browser could not reach the local engine. Keep the engine running and allow local-network access. If this preview cannot connect, open the studio in Chrome.", 503);
   });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data)
