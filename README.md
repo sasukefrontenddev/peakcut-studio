@@ -59,3 +59,9 @@ Pairing is limited to the production hostname listed in `engine/bridge.mjs` and 
 ## Credits
 
 Built on [PeakCut](https://github.com/haziqahmedqasmi/PeakCut). See [ATTRIBUTION.md](ATTRIBUTION.md) for React Bits, Motion UI, and other credits. The original MIT license and third-party font licenses are preserved.
+
+## Local AI without API credits
+
+This computer uses Ollama with Qwen2.5 3B for transcript analysis and clip selection. No API key or paid provider is required. The engine launcher disables Ollama cloud features and runs the model locally on the CPU, leaving graphics resources available for video processing. Keep the computer awake and the engine running while using the website. Processing speed depends on the video length and available memory.
+
+Install Ollama, run `ollama pull qwen2.5:3b`, then `ollama create peakcut-local -f engine/Modelfile`. In the ignored `.engine-local.json`, set `ollama` to the Ollama executable and `ollamaModels` to its local model directory. The launcher starts Ollama and configures PeakCut to use `peakcut-local:latest` without a key. Model weights and private machine settings are never uploaded to GitHub or Vercel.

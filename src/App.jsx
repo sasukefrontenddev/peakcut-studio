@@ -447,7 +447,7 @@ export default function App() {
                 setModal(null);
               }}
             >
-              Set up your AI <ArrowUpRight size={15} />
+              Local AI settings <ArrowUpRight size={15} />
             </button>
           </div>
           <button
@@ -726,7 +726,7 @@ export default function App() {
                         trigger="mount"
                       >
                         <SpotlightCard
-                          theme="light"
+                          theme="dark"
                           spotlightColor="rgba(238,113,88,0.15)"
                           className="stat-card"
                         >
@@ -910,7 +910,7 @@ export default function App() {
                       {data.creators.map((c) => (
                         <SpotlightCard
                           key={c.id}
-                          theme="light"
+                          theme="dark"
                           className="creator-card"
                         >
                           <span className="creator-avatar large">
@@ -1182,7 +1182,7 @@ export default function App() {
                   [
                     "02",
                     "Give it your signature",
-                    "Choose your clip length, caption style, and video layout. An AI key helps find the most interesting moments; loudness works without one.",
+                    "Choose your clip length, caption style, and video layout. Your local AI reads the transcript and finds moments worth sharing, without paid API credits.",
                   ],
                   [
                     "03",
@@ -1866,8 +1866,8 @@ function SettingsPage({
 }) {
   const [tab, setTab] = useState("ai");
   const [ai, setAi] = useState({
-    provider: "gemini",
-    models: "",
+    provider: "ollama",
+    models: "peakcut-local:latest",
     key: "",
     base_url: "",
   });
@@ -1941,156 +1941,18 @@ function SettingsPage({
         <section className="panel settings-panel">
           {tab === "ai" && (
             <>
-              <div className="settings-title">
-                <span className="stat-icon coral">
-                  <Sparkles size={21} />
-                </span>
-                <div>
-                  <h2>A creative partner, on your terms.</h2>
-                  <p>Bring your own AI key. Pick the moments that matter.</p>
-                </div>
+              <div className="settings-title"><span className="stat-icon coral"><Sparkles size={21}/></span><div><h2>AI that stays yours.</h2><p>Your computer finds the highlights. No paid API credits.</p></div></div>
+              <div className="local-ai-card">
+                <div className="local-ai-heading"><span className="local-ai-orb"><Sparkles size={30}/></span><Pill tone={savedAi?.provider === "ollama" && savedAi?.ready ? "green" : ""}>{savedAi?.provider === "ollama" && savedAi?.ready ? "Local AI configured" : "Waiting for your engine"}</Pill></div>
+                <h3>Your next great moment, found locally.</h3><p>Ollama runs the model on this computer. It reads your transcript, chooses highlights, and writes hooks without an API key, a credit balance, or a cloud subscription.</p>
+                <div className="local-ai-facts"><span><CheckCircle2 size={14}/>On-device processing</span><span><CheckCircle2 size={14}/>No API credits</span><span><CheckCircle2 size={14}/>Cloud AI disabled</span></div>
               </div>
-              <div className="subtle-note">
-                <CheckCircle2 size={17} />
-                <p>
-                  Your key stays on your video server. Without a key, PeakCut
-                  uses loudness to find highlights.
-                </p>
-              </div>
-              {status?.accounts && !status?.user?.is_admin ? (
-                <div className="subtle-note">
-                  <Users size={17} />
-                  <p>
-                    AI settings are managed by your workspace administrator. You
-                    can still create clips without an AI key once the video
-                    engine is ready.
-                  </p>
-                </div>
-              ) : (
-                <form
-                  className="simple-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    action(async () => {
-                      await send("/ai", ai, "PUT");
-                      setAi((a) => ({ ...a, key: "" }));
-                      await send("/ai/test", {});
-                      notify(
-                        "AI connected and tested. Ready to find your best moments.",
-                      );
-                    });
-                  }}
-                >
-                  <label className="field">
-                    AI provider
-                    <select
-                      value={ai.provider}
-                      onChange={(e) => {
-                        setModels([]);
-                        setAi({ ...ai, provider: e.target.value, models: "" });
-                      }}
-                    >
-                      {[
-                        ["gemini", "Google Gemini"],
-                        ["openai", "OpenAI"],
-                        ["anthropic", "Anthropic Claude"],
-                        ["groq", "Groq"],
-                        ["openrouter", "OpenRouter"],
-                        ["xai", "Grok (xAI)"],
-                        ["ollama", "Ollama · Local"],
-                        ["custom", "Custom · OpenAI compatible"],
-                      ].map(([k, v]) => (
-                        <option value={k} key={k}>
-                          {v}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    API key
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      placeholder={
-                        savedAi?.has_key
-                          ? "Key saved · leave blank to keep it"
-                          : "Paste your provider’s API key"
-                      }
-                      value={ai.key}
-                      onChange={(e) => setAi({ ...ai, key: e.target.value })}
-                    />
-                  </label>
-                  {["custom", "ollama"].includes(ai.provider) && (
-                    <label className="field">
-                      Base URL
-                      <input
-                        type="url"
-                        placeholder="https://your-provider.example/v1"
-                        value={ai.base_url || ""}
-                        onChange={(e) =>
-                          setAi({ ...ai, base_url: e.target.value })
-                        }
-                      />
-                    </label>
-                  )}
-                  <label className="field">
-                    Model
-                    <div className="model-row">
-                      <input
-                        list="available-models"
-                        placeholder="Find models or enter a model ID"
-                        value={
-                          Array.isArray(ai.models)
-                            ? ai.models.join(", ")
-                            : ai.models || ""
-                        }
-                        onChange={(e) =>
-                          setAi({ ...ai, models: e.target.value })
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() =>
-                          action(async () => {
-                            const d = await send("/ai/models", ai);
-                            setModels(d.models || []);
-                            notify(
-                              "Available models loaded. Choose one in the model field.",
-                            );
-                          })
-                        }
-                      >
-                        Find models
-                      </Button>
-                    </div>
-                    <datalist id="available-models">
-                      {models.map((m) => (
-                        <option
-                          key={typeof m === "string" ? m : m.id}
-                          value={typeof m === "string" ? m : m.id}
-                        />
-                      ))}
-                    </datalist>
-                  </label>
-                  {error && (
-                    <p className="form-error" role="alert">
-                      {error}
-                    </p>
-                  )}
-                  <div>
-                    <Button type="submit" disabled={busy}>
-                      {busy ? (
-                        <LoaderCircle className="spin" size={16} />
-                      ) : (
-                        <Check size={16} />
-                      )}
-                      Save & test connection
-                    </Button>
-                  </div>
-                </form>
-              )}
+              <div className="detail-row"><span>AI runtime</span><strong>Ollama · This computer</strong></div>
+              <div className="detail-row"><span>Installed model</span><strong>{savedAi?.provider === "ollama" ? (savedAi.models || []).join(", ") : "PeakCut Local · Qwen2.5 3B"}</strong></div>
+              <div className="detail-row"><span>Model billing</span><strong>No API credits or subscription</strong></div>
+              <div className="subtle-note local-ai-note"><MonitorPlay size={18}/><p>Keep PeakCut Engine running while you make clips. Your AI starts with the engine and works offline after the model is downloaded. Video links still need an internet connection.</p></div>
+              {error && <p className="form-error" role="alert">{error}</p>}
+              <Button disabled={busy || connection !== "online"} onClick={() => action(async () => {await send("/ai/test",{});notify("Your local AI answered successfully. No paid API was used.");})}>{busy ? <LoaderCircle className="spin" size={16}/> : <CheckCircle2 size={16}/>}Check local AI</Button>
             </>
           )}
           {tab === "apps" && (
@@ -2150,7 +2012,7 @@ function SettingsPage({
                 </span>
                 <div>
                   <h2>Room for your next big idea.</h2>
-                  <p>Videos, clips, and your AI key stay on this computer.</p>
+                  <p>Videos, clips, and AI processing stay on this computer.</p>
                 </div>
               </div>
               <div className="detail-row">
