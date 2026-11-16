@@ -61,12 +61,24 @@ import {
   fetchClip,
 } from "./api";
 
+import {
+  SocialConnections,
+  ClipRating,
+  ClipActions,
+  PublishingQueue,
+  CreatorSettings,
+  OriginalWorkspace,
+  UsageAndAlerts,
+} from "./StudioFeatures";
+
 const nav = [
   { id: "home", label: "Overview", icon: Home },
   { id: "videos", label: "My videos", icon: Film },
   { id: "creators", label: "Creators", icon: Users },
   { id: "live", label: "Live streams", icon: Radio },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
+  { id: "publishing", label: "Publishing", icon: Upload },
+  { id: "advanced", label: "Full workspace", icon: SlidersHorizontal },
 ];
 const defaults = {
   max_clips: 6,
@@ -573,7 +585,8 @@ export default function App() {
                 <div className="connection-banner">
                   <Cloud size={16} />
                   <span>
-                    {connectionError || "Start PeakCut Engine on this computer to connect your videos."}
+                    {connectionError ||
+                      "Start PeakCut Engine on this computer to connect your videos."}
                   </span>
                   <button onClick={refresh}>
                     Retry <RefreshCw size={13} />
@@ -939,6 +952,15 @@ export default function App() {
                             Open workspace
                             <ArrowUpRight size={15} />
                           </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() =>
+                              setModal({ type: "creatorSettings", creator: c })
+                            }
+                          >
+                            <Settings size={15} />
+                            Clipping & auto-post settings
+                          </Button>
                         </SpotlightCard>
                       ))}
                     </div>
@@ -1008,6 +1030,25 @@ export default function App() {
                               )}
                               {c.live_job ? "Stop" : "Start recording"}
                             </Button>
+                            {c.live_job && (
+                              <Button
+                                variant="outline"
+                                onClick={async () => {
+                                  try {
+                                    await send(`/live/${c.live_job}/clip`, {
+                                      seconds: 30,
+                                    });
+                                    notify("Last 30 seconds queued as a clip");
+                                    refresh();
+                                  } catch (e) {
+                                    notify(e.message);
+                                  }
+                                }}
+                              >
+                                <Scissors size={15} />
+                                Clip last 30s
+                              </Button>
+                            )}
                           </div>
                         ))
                     ) : (
@@ -1048,6 +1089,11 @@ export default function App() {
                     ))}
                   </div>
                   <ActivityChart daily={overview?.daily || []} />
+                  <PublishingQueue
+                    overview={overview}
+                    refresh={refresh}
+                    notify={notify}
+                  />
                   <div className="panel analytics-note">
                     <Eye size={20} />
                     <div>
@@ -1060,6 +1106,21 @@ export default function App() {
                   </div>
                 </>
               )}
+              {view === "publishing" && (
+                <>
+                  <PageHeading
+                    eyebrow="FROM CLIP TO CHANNEL"
+                    title="Your publishing desk."
+                    description="Post now, space out your queue, or automate each creator."
+                  />
+                  <PublishingQueue
+                    overview={overview}
+                    refresh={refresh}
+                    notify={notify}
+                  />
+                </>
+              )}
+              {view === "advanced" && <OriginalWorkspace />}
               {view === "settings" && (
                 <SettingsPage
                   status={status}
@@ -1070,6 +1131,7 @@ export default function App() {
                   onSignIn={() => setModal({ type: "auth" })}
                 />
               )}
+              {view === "settings" && <OriginalWorkspace />}
               <footer>
                 <span>
                   <img src="/favicon.svg" alt="" />
@@ -1118,6 +1180,7 @@ export default function App() {
               {
                 project: "Make something worth sharing.",
                 creator: "A new creative corner.",
+                creatorSettings: "Creator settings",
                 job:
                   modal.job?.name || modal.job?.source?.name || "Your project",
                 help: "From video to your next great clip.",
@@ -1131,7 +1194,7 @@ export default function App() {
                 help: "Three small steps to your next big moment.",
               }[modal.type]
             }
-            wide={modal.type === "project" || modal.type === "job"}
+            wide={["project", "job", "creatorSettings"].includes(modal.type)}
             onClose={() => setModal(null)}
           >
             {modal.type === "project" && (
@@ -1144,6 +1207,14 @@ export default function App() {
                   refresh();
                   notify("Your video is queued. We’ll take it from here.");
                 }}
+                notify={notify}
+              />
+            )}
+            {modal.type === "creatorSettings" && (
+              <CreatorSettings
+                creator={modal.creator}
+                accounts={data.accounts || []}
+                refresh={refresh}
                 notify={notify}
               />
             )}
@@ -1160,6 +1231,9 @@ export default function App() {
             {modal.type === "job" && (
               <JobDetails
                 job={data.jobs.find((j) => j.id === modal.job.id) || modal.job}
+                accounts={data.accounts || []}
+                refresh={refresh}
+                notify={notify}
               />
             )}{" "}
             {modal.type === "help" && (
@@ -1743,7 +1817,7 @@ function ClipPlayer({ path }) {
   );
 }
 
-function JobDetails({ job }) {
+function JobDetails({ job, accounts, refresh, notify }) {
   const [downloadError, setDownloadError] = useState("");
   const ready = (job.clips || []).filter((c) => c.status === "done");
   return (
@@ -1768,6 +1842,12 @@ function JobDetails({ job }) {
           {downloadError}
         </p>
       )}
+      {(job.clips || []).some((c) => c.status !== "done") && (
+        <p role="status">
+          Some clips are still rendering or need attention. Completed clips
+          appear below.
+        </p>
+      )}
       {ready.length ? (
         <div className="clips-grid">
           {ready.map((c) => (
@@ -1780,8 +1860,16 @@ function JobDetails({ job }) {
                 <p>
                   {duration(c.end - c.start)}
                   <span> · </span>
-                  {c.score ? `${c.score} score` : "Ready to share"}
+                  {c.hook || "Ready to share"}
                 </p>
+                <ClipRating clip={c} job={job} />
+                <ClipActions
+                  clip={c}
+                  job={job}
+                  accounts={accounts}
+                  refresh={refresh}
+                  notify={notify}
+                />
                 <Button
                   variant="outline"
                   onClick={() =>
@@ -1865,16 +1953,9 @@ function SettingsPage({
   onSignIn,
 }) {
   const [tab, setTab] = useState("ai");
-  const [ai, setAi] = useState({
-    provider: "ollama",
-    models: "peakcut-local:latest",
-    key: "",
-    base_url: "",
-  });
   const [savedAi, setSavedAi] = useState(null);
   const [storage, setStorage] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [models, setModels] = useState([]);
   const [error, setError] = useState("");
   useEffect(() => {
     let live = true;
@@ -1883,7 +1964,6 @@ function SettingsPage({
         .then((d) => {
           if (live) {
             setSavedAi(d);
-            setAi((a) => ({ ...a, ...d, key: "" }));
           }
         })
         .catch(() => {});
@@ -1922,6 +2002,7 @@ function SettingsPage({
             ["ai", "AI & intelligence", Sparkles],
             ["apps", "Connected accounts", Link],
             ["storage", "Storage & engine", Cloud],
+            ["activity", "AI activity & alerts", Bell],
             ["account", "Your account", Users],
           ].map(([id, label, Icon]) => (
             <button
@@ -1941,68 +2022,114 @@ function SettingsPage({
         <section className="panel settings-panel">
           {tab === "ai" && (
             <>
-              <div className="settings-title"><span className="stat-icon coral"><Sparkles size={21}/></span><div><h2>AI that stays yours.</h2><p>Your computer finds the highlights. No paid API credits.</p></div></div>
-              <div className="local-ai-card">
-                <div className="local-ai-heading"><span className="local-ai-orb"><Sparkles size={30}/></span><Pill tone={savedAi?.provider === "ollama" && savedAi?.ready ? "green" : ""}>{savedAi?.provider === "ollama" && savedAi?.ready ? "Local AI configured" : "Waiting for your engine"}</Pill></div>
-                <h3>Your next great moment, found locally.</h3><p>Ollama runs the model on this computer. It reads your transcript, chooses highlights, and writes hooks without an API key, a credit balance, or a cloud subscription.</p>
-                <div className="local-ai-facts"><span><CheckCircle2 size={14}/>On-device processing</span><span><CheckCircle2 size={14}/>No API credits</span><span><CheckCircle2 size={14}/>Cloud AI disabled</span></div>
+              <div className="settings-title">
+                <span className="stat-icon coral">
+                  <Sparkles size={21} />
+                </span>
+                <div>
+                  <h2>AI that stays yours.</h2>
+                  <p>
+                    Your computer finds the highlights. No paid API credits.
+                  </p>
+                </div>
               </div>
-              <div className="detail-row"><span>AI runtime</span><strong>Ollama · This computer</strong></div>
-              <div className="detail-row"><span>Installed model</span><strong>{savedAi?.provider === "ollama" ? (savedAi.models || []).join(", ") : "PeakCut Local · Qwen2.5 3B"}</strong></div>
-              <div className="detail-row"><span>Model billing</span><strong>No API credits or subscription</strong></div>
-              <div className="subtle-note local-ai-note"><MonitorPlay size={18}/><p>Keep PeakCut Engine running while you make clips. Your AI starts with the engine and works offline after the model is downloaded. Video links still need an internet connection.</p></div>
-              {error && <p className="form-error" role="alert">{error}</p>}
-              <Button disabled={busy || connection !== "online"} onClick={() => action(async () => {await send("/ai/test",{});notify("Your local AI answered successfully. No paid API was used.");})}>{busy ? <LoaderCircle className="spin" size={16}/> : <CheckCircle2 size={16}/>}Check local AI</Button>
+              <div className="local-ai-card">
+                <div className="local-ai-heading">
+                  <span className="local-ai-orb">
+                    <Sparkles size={30} />
+                  </span>
+                  <Pill
+                    tone={
+                      savedAi?.provider === "ollama" && savedAi?.ready
+                        ? "green"
+                        : ""
+                    }
+                  >
+                    {savedAi?.provider === "ollama" && savedAi?.ready
+                      ? "Local AI configured"
+                      : "Waiting for your engine"}
+                  </Pill>
+                </div>
+                <h3>Your next great moment, found locally.</h3>
+                <p>
+                  Ollama runs the model on this computer. It reads your
+                  transcript, chooses highlights, and writes hooks without an
+                  API key, a credit balance, or a cloud subscription.
+                </p>
+                <div className="local-ai-facts">
+                  <span>
+                    <CheckCircle2 size={14} />
+                    On-device processing
+                  </span>
+                  <span>
+                    <CheckCircle2 size={14} />
+                    No API credits
+                  </span>
+                  <span>
+                    <CheckCircle2 size={14} />
+                    Cloud AI disabled
+                  </span>
+                </div>
+              </div>
+              <div className="detail-row">
+                <span>AI runtime</span>
+                <strong>Ollama · This computer</strong>
+              </div>
+              <div className="detail-row">
+                <span>Installed model</span>
+                <strong>
+                  {savedAi?.provider === "ollama"
+                    ? (savedAi.models || []).join(", ")
+                    : "PeakCut Local · Qwen2.5 3B"}
+                </strong>
+              </div>
+              <div className="detail-row">
+                <span>Model billing</span>
+                <strong>No API credits or subscription</strong>
+              </div>
+              <div className="subtle-note local-ai-note">
+                <MonitorPlay size={18} />
+                <p>
+                  Keep PeakCut Engine running while you make clips. Your AI
+                  starts with the engine and works offline after the model is
+                  downloaded. Video links still need an internet connection.
+                </p>
+              </div>
+              {error && (
+                <p className="form-error" role="alert">
+                  {error}
+                </p>
+              )}
+              <Button
+                disabled={busy || connection !== "online"}
+                onClick={() =>
+                  action(async () => {
+                    await send("/ai/test", {});
+                    notify(
+                      "Your local AI answered successfully. No paid API was used.",
+                    );
+                  })
+                }
+              >
+                {busy ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : (
+                  <CheckCircle2 size={16} />
+                )}
+                Check local AI
+              </Button>
             </>
           )}
           {tab === "apps" && (
-            <>
-              <div className="settings-title">
-                <span className="stat-icon lilac">
-                  <Link size={21} />
-                </span>
-                <div>
-                  <h2>Good content deserves to get out.</h2>
-                  <p>Connect your channels to publish from PeakCut.</p>
-                </div>
-              </div>
-              {["youtube", "instagram", "tiktok"].map((p) => (
-                <div className="connected-row" key={p}>
-                  <span className={`platform-icon ${p}`}>
-                    {p === "youtube" ? "▷" : p === "instagram" ? "◎" : "♪"}
-                  </span>
-                  <div>
-                    <h3>
-                      {p === "youtube"
-                        ? "YouTube"
-                        : p === "instagram"
-                          ? "Instagram"
-                          : "TikTok"}
-                    </h3>
-                    <p>
-                      {accounts
-                        .filter((a) => a.platform === p)
-                        .map((a) => a.name || a.label || "Connected")
-                        .join(", ") || "No account connected"}
-                    </p>
-                  </div>
-                  {status?.connect?.[p] ? (
-                    <a
-                      className="button outline"
-                      href={localEngineRoute(`/oauth/${p}/start`)}
-                    >
-                      Connect <ArrowUpRight size={14} />
-                    </a>
-                  ) : (
-                    <Pill>Server setup needed</Pill>
-                  )}
-                </div>
-              ))}
-              <p className="muted settings-footnote">
-                The video server needs the platform’s OAuth credentials before
-                you can connect an account.
-              </p>
-            </>
+            <SocialConnections
+              accounts={accounts}
+              connection={connection}
+              refresh={refresh}
+              notify={notify}
+            />
+          )}
+          {tab === "activity" && (
+            <UsageAndAlerts connection={connection} notify={notify} />
           )}
           {tab === "storage" && (
             <>

@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "engine": "node engine/start.mjs",
-    "test:engine": "node --test engine/bridge.test.mjs"
+    "test:engine": "node --test engine/bridge.test.mjs",
+    "test:features": "node --test tests/features.test.mjs"
   },
   "dependencies": {
     "@vercel/config": "0.14.1",
