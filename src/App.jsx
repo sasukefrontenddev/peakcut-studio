@@ -66,6 +66,8 @@ const defaults = {
 };
 const stages = [
   "queued",
+  "running",
+  "live",
   "downloading",
   "transcribing",
   "analyzing",
@@ -511,6 +513,7 @@ export default function App() {
                   </button>
                 </div>
               )}
+              {status?.disk_full && <div className="connection-banner" role="alert"><Cloud size={16}/><span>The video engine needs more storage before it can accept videos.</span><button onClick={() => changeView("settings")}>Storage <ArrowRight size={13}/></button></div>}
               {view === "home" && (
                 <>
                   <div className="page-heading">
@@ -987,9 +990,9 @@ export default function App() {
                 </span>
                 <span>
                   <span
-                    className={`status-dot ${connection === "online" ? "online" : ""}`}
+                    className={`status-dot ${["online", "signin"].includes(connection) ? "online" : ""}`}
                   />
-                  {connection === "online"
+                  {["online", "signin"].includes(connection)
                     ? "Video engine connected"
                     : connection === "loading"
                       ? "Connecting to video engine"
@@ -1807,7 +1810,7 @@ function SettingsPage({
                   uses loudness to find highlights.
                 </p>
               </div>
-              <form
+              {status?.accounts && !status?.user?.is_admin ? <div className="subtle-note"><Users size={17}/><p>AI settings are managed by your workspace administrator. You can still create clips without an AI key once the video engine is ready.</p></div> : <form
                 className="simple-form"
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -1927,7 +1930,7 @@ function SettingsPage({
                     Save & test connection
                   </Button>
                 </div>
-              </form>
+              </form>}
             </>
           )}
           {tab === "apps" && (
@@ -2062,6 +2065,7 @@ function SettingsPage({
                   </Button>
                 )
               )}
+              <a className="button outline" href="/app" style={{marginTop: 24}}>Open full editing workspace <ArrowUpRight size={15}/></a>
               <a
                 className="source-link"
                 href="https://github.com/haziqahmedqasmi/PeakCut"

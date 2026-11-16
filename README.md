@@ -43,9 +43,9 @@ PEAKCUT_UPDATE_CHECK=0
 
 The Railway Dockerfile stores the speech model in the image rather than consuming the video volume. Use enough persistent disk for your videos and clips, and a server with enough RAM for the 0.6B speech model. Production signup is protected by the engine's existing session and request-origin checks. AI settings require an admin account. Grant an existing account admin access using the documented `python -m studio.admin grant <email>` command on the server.
 
-Once the secured backend is running, replace the temporary `/api` rewrite in `vercel.json` with the backend's HTTPS address. Forward `/api/:path*`, `/media/:path*`, `/oauth/:path*`, and `/auth/:path*` to the same paths on that backend. Keep authentication cookies on the Vercel origin using same-origin rewrites. No API keys belong in the frontend or the public repository.
+The production routes in `vercel.json` connect to `https://peakcut-engine-production.up.railway.app`. API calls, videos, and sign-in use same-origin rewrites, so sessions stay on the Vercel origin. No API keys belong in the frontend or the public repository. The full original editing workspace remains available at `/app` for all of the engine's advanced editing and publishing controls.
 
-Until that connection is active, the deployed frontend clearly shows that its video engine is offline and rejects project submission. It does not simulate successful processing or display invented clips or analytics.
+The current Railway trial provides only 500 MB of persistent storage. The engine preserves its 3 GB minimum-free-space protection, so creating videos remains blocked until the hosting storage is increased. The application shows that condition after sign-in. Upgrade the hosting plan and expand the existing volume to at least 5 GB before processing videos. The model is already included in the server image and does not use that volume.
 
 ## Build
 

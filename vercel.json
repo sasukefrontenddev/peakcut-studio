@@ -4,19 +4,87 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/unavailable" },
-    { "source": "/((?!assets/|favicon.svg).*)", "destination": "/index.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "https://peakcut-engine-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/media/:path*",
+      "destination": "https://peakcut-engine-production.up.railway.app/media/:path*"
+    },
+    {
+      "source": "/oauth/:path*",
+      "destination": "https://peakcut-engine-production.up.railway.app/oauth/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://peakcut-engine-production.up.railway.app/auth/:path*"
+    },
+    {
+      "source": "/brand/:path*",
+      "destination": "https://peakcut-engine-production.up.railway.app/brand/:path*"
+    },
+    {
+      "source": "/pub/:path*",
+      "destination": "https://peakcut-engine-production.up.railway.app/pub/:path*"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "https://peakcut-engine-production.up.railway.app/app/:path*"
+    },
+    {
+      "source": "/login",
+      "destination": "https://peakcut-engine-production.up.railway.app/login"
+    },
+    {
+      "source": "/signup",
+      "destination": "https://peakcut-engine-production.up.railway.app/signup"
+    },
+    {
+      "source": "/reset",
+      "destination": "https://peakcut-engine-production.up.railway.app/reset"
+    },
+    {
+      "source": "/privacy",
+      "destination": "https://peakcut-engine-production.up.railway.app/privacy"
+    },
+    {
+      "source": "/terms",
+      "destination": "https://peakcut-engine-production.up.railway.app/terms"
+    },
+    {
+      "source": "/acceptable-use",
+      "destination": "https://peakcut-engine-production.up.railway.app/acceptable-use"
+    },
+    {
+      "source": "/assets/ascii.js",
+      "destination": "https://peakcut-engine-production.up.railway.app/assets/ascii.js"
+    },
+    {
+      "source": "/assets/gradient-ascii.js",
+      "destination": "https://peakcut-engine-production.up.railway.app/assets/gradient-ascii.js"
+    },
+    {
+      "source": "/((?!assets/|favicon.svg).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
         {
           "key": "Referrer-Policy",
           "value": "strict-origin-when-cross-origin"
         },
-        { "key": "X-Frame-Options", "value": "DENY" }
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
       ]
     }
   ]
