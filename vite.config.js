@@ -23,7 +23,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: Object.fromEntries(
-      ["/api", "/media", "/oauth", "/auth", "/brand", "/app"].map((path) => [
+      ["/api", "/media", "/auth", "/brand", "/app"].map((path) => [
         path,
         { target: "http://127.0.0.1:8765", changeOrigin: true },
       ]),

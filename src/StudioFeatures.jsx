@@ -48,7 +48,7 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
   const load = () => api("/apps").then(setApps);
   useEffect(() => {
     let live = true;
-    if (connection === "online")
+    const tick = () =>
       api("/apps")
         .then((d) => {
           if (live) setApps(d);
@@ -56,8 +56,14 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
         .catch((e) => {
           if (live) setError(e.message);
         });
+    let interval;
+    if (connection === "online") {
+      tick();
+      interval = setInterval(tick, 10000);
+    }
     return () => {
       live = false;
+      clearInterval(interval);
     };
   }, [connection]);
   async function save(e, p) {
