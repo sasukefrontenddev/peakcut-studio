@@ -15,6 +15,7 @@ from urllib.parse import quote, urlparse
 
 import sqlalchemy as sa
 import uvicorn
+import httpx
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -1333,6 +1334,29 @@ def remove_account(aid: str):
 def _back(**q):
     from urllib.parse import urlencode as _ue
     return RedirectResponse("/app/settings/apps?" + _ue(q), 303)
+
+
+@app.post("/api/social/{platform}/start")
+def social_start(platform: str):
+    if platform not in accounts.PLATFORM_NAMES:
+        raise HTTPException(404, "Unknown platform.")
+    try:
+        _throttle("social-start:" + ctx.uid(), 20, 600)
+        return {"url": accounts.connect_url(platform)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/social/{platform}/finish")
+def social_finish(platform: str, body: dict = Body(...)):
+    if platform not in accounts.PLATFORM_NAMES:
+        raise HTTPException(404, "Unknown platform.")
+    try:
+        _throttle("social-finish:" + ctx.uid(), 20, 600)
+        acc = accounts.connect_finish(platform, str(body.get("code") or "")[:4096], str(body.get("state") or "")[:200])
+        return {"ok": True, "platform": platform, "name": acc["name"]}
+    except (ValueError, RuntimeError, httpx.HTTPError) as e:
+        raise HTTPException(400, safe.friendly(e, 240))
 
 
 @app.get("/oauth/{platform}/start")

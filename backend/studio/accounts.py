@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 
 import httpx
 
-from . import config, ctx
+from . import config, ctx, social
 
 _lock = threading.RLock()
 _states: dict = {}   # one-time values for the connect redirects: state -> (user id, when, platform)
@@ -110,7 +110,7 @@ def can_connect(platform: str) -> bool:
 
 
 def redirect_for(platform: str) -> str:
-    return f"{config.PUBLIC_URL}/oauth/{platform}/callback"
+    return f"{social.callback_origin() or config.PUBLIC_URL}/oauth/{platform}/callback"
 
 
 def apps_public() -> dict:
@@ -120,7 +120,8 @@ def apps_public() -> dict:
         cid, secret = app_keys(name)
         out[platform] = {"ready": bool(cid and secret), "id_label": APPS[name][0], "secret_label": APPS[name][1],
                          "id_hint": cid[:6] + "…" if len(cid) > 10 else cid, "redirect": redirect_for(platform),
-                         "https": config.PUBLIC_URL.startswith("https://"),
+                         "https": redirect_for(platform).startswith("https://"),
+                         "relay": bool(social.callback_origin()), "media_ready": bool(social.media_origin()),
                          "from_dashboard": bool((_apps_saved().get(name) or {}).get("id"))}
     return out
 
@@ -215,7 +216,7 @@ def clip_link(job_id: str, file_name: str, seconds: int = 3600) -> str:
     body = json.dumps([ctx.uid(), job_id, file_name, int(time.time() + seconds)], separators=(",", ":")).encode()
     b = base64.urlsafe_b64encode(body).decode().rstrip("=")
     sig = base64.urlsafe_b64encode(hmac.new(_link_key(), b.encode(), hashlib.sha256).digest()[:18]).decode().rstrip("=")
-    return f"{config.PUBLIC_URL}/pub/{b}.{sig}.mp4"
+    return f"{social.media_origin() or config.PUBLIC_URL}/pub/{b}.{sig}.mp4"
 
 
 def read_clip_link(token: str):
@@ -416,7 +417,9 @@ def instagram_upload(acc, path: Path, caption: str, job_id: str = ""):
     token = _ig_token(acc)
     auth = {"Authorization": f"Bearer {token}"}
     uid = acc["user_id"]
-    if config.PUBLIC_URL.startswith("https://") and job_id:
+    if social.callback_origin() and not social.media_origin() and not config.PUBLIC_URL.startswith("https://"):
+        raise RuntimeError("The free Instagram clip relay is offline. Restart PeakCut Engine and try again.")
+    if (social.media_origin() or config.PUBLIC_URL.startswith("https://")) and job_id:
         box = _check(httpx.post(f"{IG}/{uid}/media", data={"media_type": "REELS", "video_url": clip_link(job_id, path.name),
                                                            "caption": caption[:2200], "share_to_feed": "true"},
                                 headers=auth, timeout=60), "Starting the Instagram post").json()

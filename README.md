@@ -112,10 +112,18 @@ Open **Settings → Connected accounts → Set up** for the platform you want. T
 | Platform | What must be configured |
 | --- | --- |
 | YouTube | A Google Cloud OAuth client, YouTube Data API v3, consent/test-user setup, and any required platform verification. |
-| Instagram | A Meta developer app, eligible Creator/Business account, publishing permissions, HTTPS callback, and a publicly retrievable signed clip link. |
-| TikTok | Login Kit, Content Posting API / Direct Post, HTTPS callback, and an audit for public posting. Unaudited apps have private-post restrictions. |
+| Instagram | A Meta developer app, eligible Creator/Business account, publishing permissions, and the included free HTTPS sign-in/clip relay. |
+| TikTok | Login Kit, Content Posting API / Direct Post, the included free HTTPS callback, and an audit for public posting. Unaudited apps have private-post restrictions. |
 
-**These registrations are not included or activated for you.** This version’s default engine is private and loopback-only. Instagram/TikTok need a separately secured public HTTPS connection; pointing their callback at the Vercel static frontend is not enough. Social publishing is therefore a configured feature, not an out-of-the-box promise.
+**Developer-app registrations are still required.** No paid hosting plan is needed for the connection:
+
+- The Vercel site serves a stable HTTPS OAuth callback. The same paired browser forwards the one-time result to the local engine, which verifies its state and exchanges the code. App secrets and account tokens stay local.
+- TikTok uploads video bytes directly from your computer.
+- Instagram fetches expiring HMAC-signed clip links through an optional free Cloudflare Quick Tunnel. A dedicated gateway permits only those links and a small health check; `/api`, `/app`, OAuth starts, and other files are not exposed.
+
+Download the official [cloudflared client](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/), then add its absolute executable path as `"cloudflared"` in `.engine-local.json`. The engine launcher starts the restricted clip relay automatically. The tunnel address may change after restart; the Vercel callback remains stable, so the platform callback does not need changing. Keep the engine running while connecting/publishing. Quick Tunnels have no uptime guarantee and are suitable for this personal local workflow, not a production availability promise.
+
+Register `https://peakcut-studio-chi.vercel.app/oauth/instagram/callback` and `https://peakcut-studio-chi.vercel.app/oauth/tiktok/callback` in the relevant developer apps. A self-hosted frontend must set its own HTTPS `PEAKCUT_SOCIAL_CALLBACK_ORIGIN` and exact connector origin allowlists. No platform review or permission requirement is bypassed.
 
 After connection, open a finished clip → **Publish clip**, select accounts, and choose **Post now** or **Add to queue**. Creator settings control automation, visibility, minimum score, spacing, and daily limits. See [feature coverage and verification](FEATURE-PARITY.md) for what has been tested and what remains platform-dependent.
 

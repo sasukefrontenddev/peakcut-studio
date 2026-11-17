@@ -1,6 +1,6 @@
 # PeakCut feature coverage
 
-Compared with upstream `haziqahmedqasmi/PeakCut` main at `b3e403e27444b620a50a4ec1cf44b3afff9e9e45` on 16 November 2026. All 50 source files in `studio/` and `web/` match the upstream checkout byte for byte in `backend/`. The original engine, routes, signed-in workspace, and admin pages are retained. The React interface is an additional interface over that engine.
+Compared with upstream `haziqahmedqasmi/PeakCut` main at `b3e403e27444b620a50a4ec1cf44b3afff9e9e45` on 16 November 2026. The inherited implementation originally matched all 50 `studio/` and `web/` source files. `studio/accounts.py` and `studio/server.py` now include the local HTTPS OAuth relay, with a new `studio/social.py` transport helper. The original engine, routes, signed-in workspace, and admin pages are retained. The React interface is an additional interface over that engine.
 
 | Upstream function | Where to use it |
 | --- | --- |
@@ -29,7 +29,7 @@ No social developer apps or user social accounts are configured. Real account au
 
 YouTube requires a Google Cloud OAuth client and YouTube Data API access. Instagram requires an eligible professional account and Meta app permissions. TikTok requires Login Kit, Direct Post permissions, and an audit for public posting. Platform restrictions and approval rules remain in force.
 
-The current engine is private and loopback-only. Instagram/TikTok need an HTTPS callback, and this engine’s Instagram publisher also uses publicly retrievable signed clip links. A separately secured HTTPS relay or host must be configured before those connections can complete. The Vercel static frontend is not that host. The app clearly reports this prerequisite rather than presenting a working Connect button for an unusable callback. No public tunnel is enabled by this update.
+The engine remains loopback-only. The Vercel frontend now serves stable HTTPS OAuth return pages and forwards one-time results through the paired browser. Instagram uses a restricted signed-media gateway with a free Cloudflare Quick Tunnel when the official client is configured. TikTok uploads directly. App credentials, tokens, dashboard routes, and private APIs are not exposed through the tunnel. Platform app setup remains required.
 
 ## Verification
 

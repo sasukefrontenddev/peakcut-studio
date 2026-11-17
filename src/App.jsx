@@ -224,7 +224,11 @@ function Modal({ title, subtitle, children, onClose, wide = false }) {
 }
 
 export default function App() {
-  const [view, setView] = useState("home");
+  const [view, setView] = useState(() =>
+    new URLSearchParams(window.location.search).get("settings") === "apps"
+      ? "settings"
+      : "home",
+  );
   const [status, setStatus] = useState(null);
   const [data, setData] = useState({ jobs: [], creators: [], accounts: [] });
   const [overview, setOverview] = useState(null);
@@ -1952,7 +1956,11 @@ function SettingsPage({
   refresh,
   onSignIn,
 }) {
-  const [tab, setTab] = useState("ai");
+  const [tab, setTab] = useState(() =>
+    new URLSearchParams(window.location.search).get("settings") === "apps"
+      ? "apps"
+      : "ai",
+  );
   const [savedAi, setSavedAi] = useState(null);
   const [storage, setStorage] = useState(null);
   const [busy, setBusy] = useState(false);

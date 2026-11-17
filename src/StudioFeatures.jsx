@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  api,
-  send,
-  localEngineRoute,
-  fullStudioUrl,
-} from "./api";
+import { api, send, localEngineRoute, fullStudioUrl } from "./api";
 
 const names = { youtube: "YouTube", instagram: "Instagram", tiktok: "TikTok" };
 const guides = {
@@ -24,7 +19,7 @@ const guides = {
       "Use a Creator or Business Instagram account and add it as an app tester while developing.",
       "Request instagram_business_basic and instagram_business_content_publish. Register the HTTPS redirect address below.",
     ],
-    note: "Instagram needs a public HTTPS engine address for login and for fetching the signed video link. Your current local-only engine cannot provide that link.",
+    note: "The free HTTPS callback returns sign-in to your paired local engine. Instagram fetches finished clips through a separate, temporary signed-link relay. Keep PeakCut Engine running.",
   },
   tiktok: {
     url: "https://developers.tiktok.com/apps/",
@@ -33,7 +28,7 @@ const guides = {
       "Request user.info.basic and video.publish. Register the HTTPS redirect address below.",
       "Complete TikTok’s app review and audit for public direct posting.",
     ],
-    note: "Unaudited TikTok apps can only publish privately. A public HTTPS callback address is required.",
+    note: "The free HTTPS callback returns sign-in to your paired local engine. Videos upload directly from your computer. TikTok still requires its developer-app review; unaudited apps are restricted to private posts.",
   },
 };
 function ErrorText({ error }) {
@@ -129,16 +124,40 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
               >
                 {open === p ? "Close setup" : "Set up"}
               </button>
-              {st?.ready && !needsHttps && (
-                <a
-                  className="button"
-                  href={localEngineRoute(`/oauth/${p}/start`)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Connect {name} ↗
-                </a>
-              )}
+              {st?.ready &&
+                !needsHttps &&
+                (st?.relay ? (
+                  <button
+                    className="button"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError("");
+                      try {
+                        const result = await send(`/social/${p}/start`, {});
+                        sessionStorage.setItem(
+                          "peakcut-social-" + p,
+                          new URL(result.url).searchParams.get("state"),
+                        );
+                        window.location.assign(result.url);
+                      } catch (e) {
+                        setError(e.message);
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Connect {name} ↗
+                  </button>
+                ) : (
+                  <a
+                    className="button"
+                    href={localEngineRoute(`/oauth/${p}/start`)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Connect {name} ↗
+                  </a>
+                ))}
             </div>
             {accounts
               .filter((a) => a.platform === p)
@@ -173,12 +192,27 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
                   </button>
                 </div>
               ))}
-            {needsHttps && (
-              <p className="setup-warning">
-                {name} connection is waiting for a public HTTPS engine address.
-                Registering the Vercel frontend address alone will not connect
-                this local engine.
-              </p>
+            {p !== "youtube" && (
+              <div className="social-status">
+                <strong>
+                  {st?.relay
+                    ? "Free HTTPS sign-in is configured"
+                    : "Activate the free connection"}
+                </strong>
+                <p>
+                  {st?.relay
+                    ? p === "instagram"
+                      ? st.media_ready
+                        ? "Instagram clip relay is ready. Only expiring signed clip links can be fetched; your dashboard stays private."
+                        : "Sign-in is ready. The free Instagram clip relay is offline; restart PeakCut Engine before publishing."
+                      : "TikTok uploads directly from your computer. No public video server or paid hosting plan is needed."
+                    : "Restart the updated PeakCut Engine to enable the included free HTTPS callback. No paid plan is needed."}
+                </p>
+                <p>
+                  Platform app credentials and approval are still required
+                  before an account can connect.
+                </p>
+              </div>
             )}
             {open === p && (
               <form
