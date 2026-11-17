@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!assets/|favicon.svg).*)",
+      "source": "/((?!assets/|favicon.svg|app-icon.png|privacy.html|terms.html|data-deletion.html).*)",
       "destination": "/index.html"
     }
   ],
