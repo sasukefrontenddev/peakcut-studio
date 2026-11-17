@@ -26,3 +26,10 @@ You must register the Meta/TikTok developer apps, supply their credentials in Co
 - The upstream suite was run before and after backend changes with FFmpeg on the test path. Both runs had the same four pre-existing failures: one macOS CPU-load fixture and three embedded-backend Git-version fixtures. No new failures appeared.
 
 References: [Cloudflare Quick Tunnels](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/), [TikTok web sign-in](https://developers.tiktok.com/doc/login-kit-web/), and [Meta content publishing](https://developers.facebook.com/documentation/instagram-platform/content-publishing).
+# New Instagram apps: Unified Login
+
+Meta now requires Unified Login for newly created Instagram apps. Create a business-owned Meta app, enable `instagram_basic` and `instagram_content_publish`, and create a Facebook Login for Business configuration with the Instagram account asset. Use a 60-day system-user token configuration if ongoing publishing is needed. Register the exact Instagram callback shown in PeakCut.
+
+Save the Meta app ID, Meta app secret, and the configuration ID in PeakCut's Instagram setup. A configuration ID selects Unified Login; leave it empty only for an older Instagram Login app. Secrets and access tokens remain on the local engine. Unified Login uses `graph.facebook.com`; existing Instagram Login accounts continue using `graph.instagram.com`. Reconnect when a 60-day authorization expires.
+
+The Instagram profile must be a professional account and shared during authorization. Development access is limited to eligible app roles; broader use still requires Meta review. Creating the developer app does not connect a social account or publish any video.

@@ -15,9 +15,9 @@ const guides = {
   instagram: {
     url: "https://developers.facebook.com/apps/",
     steps: [
-      "Create a Meta developer app with Instagram API setup using Instagram Login.",
+      "Create a Meta developer app with the Instagram use case and a business portfolio. New apps use Unified Login.",
       "Use a Creator or Business Instagram account and add it as an app tester while developing.",
-      "Request instagram_business_basic and instagram_business_content_publish. Register the HTTPS redirect address below.",
+      "For Unified Login, create a configuration with instagram_basic and instagram_content_publish, and register the HTTPS callback below. Older Instagram Login apps can keep their existing setup.",
     ],
     note: "The free HTTPS callback returns sign-in to your paired local engine. Instagram fetches finished clips through a separate, temporary signed-link relay. Keep PeakCut Engine running.",
   },
@@ -43,6 +43,7 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
     [open, setOpen] = useState(""),
     [id, setId] = useState(""),
     [secret, setSecret] = useState(""),
+    [configId, setConfigId] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const load = () => api("/apps").then(setApps);
@@ -74,7 +75,8 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
       setApps(
         await send(
           "/apps",
-          { platform: p, client_id: id, client_secret: secret },
+          { platform: p, client_id: id, client_secret: secret,
+            ...(p === "instagram" ? { config_id: configId } : {}) },
           "PUT",
         ),
       );
@@ -125,6 +127,7 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
                   setOpen(open === p ? "" : p);
                   setId("");
                   setSecret("");
+                  setConfigId(st?.config_id || "");
                   setError("");
                 }}
               >
@@ -242,6 +245,14 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
                   />
                 </label>
                 <p className="muted">{guides[p].note}</p>
+                {p === "instagram" && (
+                  <label>
+                    Unified Login configuration ID
+                    <input value={configId} onChange={(e) => setConfigId(e.target.value)}
+                      autoComplete="off" inputMode="numeric"
+                      placeholder="Leave empty only for an older Instagram Login app" />
+                  </label>
+                )}
                 <div className="feature-fields">
                   <label>
                     {st?.id_label || "App ID"}
