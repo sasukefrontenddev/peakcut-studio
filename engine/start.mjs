@@ -174,7 +174,7 @@ if (local.cloudflared) {
 }
 if (local.cloudflared && local.remoteMonitor) {
   try {
-    widgetMonitor = await startMonitor({root, cloudflared: local.cloudflared});
+    widgetMonitor = await startMonitor({root, cloudflared: local.cloudflared, remoteControl: local.remoteControl===true});
   } catch (e) {
     console.log(e.code === "EADDRINUSE" ? "Reusing the read-only widget connection." : "Widget connection: " + e.message);
   }
