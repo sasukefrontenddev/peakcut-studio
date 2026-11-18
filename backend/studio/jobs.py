@@ -154,7 +154,7 @@ def public(job) -> dict:
     """What the browser may see: no server paths, no owner id."""
     out = {k: v for k, v in job.items() if k not in HIDDEN}
     out["source"] = {k: v for k, v in job["source"].items() if k != "path"}
-    out["clips"] = [{k: v for k, v in c.items() if k not in ("src", "fixed_words", "fixed_for")} for c in job["clips"]]
+    out["clips"] = [{k: v for k, v in c.items() if k not in ("src", "fixed_words", "fixed_for", "speech_words", "speech_for", "post_copy_evidence")} for c in job["clips"]]
     ai = job.get("ai") or {}
     out["ai"] = {"tokens": ai.get("tokens", 0), "note": ai.get("note", ""), "used": bool(ai.get("model"))}   # never the model, never raw errors
     if job.get("status") == "queued":
@@ -373,6 +373,25 @@ def request_render(jid, cid, changes: dict):
     _q.put(("clip", jid, cid))
 
 
+def ground_post(job, clip):
+    """Final speech drives social copy even when burned-in subtitles are disabled."""
+    if not captions.available():
+        return
+    from . import speechcopy
+    off = clip.get("src_offset", 0.0)
+    src = Path(clip.get("src") or job["source_path"])
+    language = clip.get("caption_language", "auto")
+    span = [clip["start"], clip["end"], language, "native-speech-v1"]
+    if clip.get("speech_for") != span:
+        heard, detected = captions.transcribe_clip(src, clip["start"]-off, clip["end"]-off, language, romanize=False)
+        clip.update(speech_words=heard, speech_for=span, speech_language=detected)
+    heard = clip.get("speech_words", [])
+    mark = speechcopy.fingerprint(heard, clip.get("speech_language", language))
+    if clip.get("post_copy_for") != mark:
+        clip.update(speechcopy.build(heard, clip.get("speech_language", language)), post_copy_for=mark)
+    return heard
+
+
 def render_one(job, clip, words):
     d = Path(job["dir"])
     clip["status"] = "rendering"
@@ -386,13 +405,16 @@ def render_one(job, clip, words):
         language = clip.get("caption_language", "auto")
         method = "whisper-1:" + Path(config.env("PEAKCUT_CAPTION_MODEL")).name if captions.available() else "en3"
         span = [round(clip["start"], 2), round(clip["end"], 2), method, language]      # invalidate older AI-rewritten captions
+        verified = ground_post(job, clip)
+        local["hook"] = clip.get("hook", "")
         if not clip.get("captions", True):
             raw = []
         elif clip.get("fixed_for") == span and clip.get("fixed_words") and not any(
                 roman.needs_roman(w.get("w", "")) for w in clip["fixed_words"]):
             raw = clip["fixed_words"]          # already tidied for this exact span: no second AI call
         elif captions.available():
-            heard, detected = captions.transcribe_clip(src, local["start"], local["end"], language)
+            heard = roman.words(verified) if verified is not None else []
+            detected = clip.get("speech_language", "auto")
             raw = [dict(w, s=w["s"] + clip["start"], e=w["e"] + clip["start"]) for w in heard]
             clip.update(fixed_words=raw, fixed_for=span, caption_source="local-whisper", caption_language_detected=detected,
                         caption_note="" if heard else "No confident speech was recognized; uncertain captions were omitted.")

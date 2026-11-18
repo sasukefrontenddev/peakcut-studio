@@ -56,6 +56,7 @@ def main() -> int:
                 ("connecting YouTube, Instagram and TikTok", ["tests/test_connect.py"]),
                 ("Facebook Page Reels", ["tests/test_facebook.py"]),
                 ("creator-aware social post captions", ["tests/test_postcopy.py"]),
+                ("multilingual dialogue-based post text", ["tests/test_speechcopy.py"]),
                 ("audio-video sync and caption controls", ["tests/test_render_sync.py"]),
                 ("the new-version notice", ["tests/test_updates.py"]),
                 ("no limits by default", ["tests/test_limits.py"]),

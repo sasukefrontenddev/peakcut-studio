@@ -14,7 +14,7 @@ def available():
     return bool(config.env("PEAKCUT_CAPTION_PYTHON") and config.env("PEAKCUT_CAPTION_MODEL"))
 
 
-def transcribe_clip(source, start, end, language="auto"):
+def transcribe_clip(source, start, end, language="auto", romanize=True):
     # Only one multilingual pass at once; the running live recorder keeps its CPU headroom.
     with _slot, tempfile.TemporaryDirectory(prefix="caption-", dir=config.TMP_DIR) as temp:
         wav = Path(temp) / "speech.wav"
@@ -35,6 +35,6 @@ def transcribe_clip(source, start, end, language="auto"):
                 if not math.isfinite(s) or not math.isfinite(e) or e <= s or s >= end-start:
                     continue
                 words.append({"w": str(w["w"])[:120], "s": max(0, s), "e": min(end-start, e)})
-            return roman.words(words), str(data.get("language", "auto"))
+            return (roman.words(words) if romanize else words), str(data.get("language", "auto"))
         except Exception as e:
             raise RuntimeError("Local multilingual captions failed. Try re-rendering, or turn captions off for this clip.") from e

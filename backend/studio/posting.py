@@ -111,6 +111,8 @@ def _post(p):
             raise RuntimeError("That account was disconnected.")
         path = Path(job["dir"]) / "clips" / clip["file"]
         creator = creators.get(job["creator"]) or dict(creators.DEFAULTS, name="clips")
+        if jobs.ground_post(job, clip) is not None:
+            jobs.save(job)
         copy = postcopy.build(clip, creator)
         title, cap = copy["title"], copy["caption"]
         if acc["platform"] == "youtube":
