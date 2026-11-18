@@ -32,7 +32,7 @@ user, b = person("user@example.com")
 
 # ---- nothing is set up: the buttons say so, and only an admin may set it up
 st = b.get("/api/status").json()
-check("nothing can be connected before setup", st["connect"], {"youtube": False, "instagram": False, "tiktok": False})
+check("nothing can be connected before setup", st["connect"], {"facebook": False, "youtube": False, "instagram": False, "tiktok": False})
 check("a normal user cannot see the setup", b.get("/api/apps").status_code, 404)
 check("...or change it", b.put("/api/apps", json={"platform": "tiktok", "client_id": "abcd", "client_secret": "x"}, headers=ORIGIN).status_code, 404)
 r = b.get("/oauth/instagram/start")
@@ -48,7 +48,7 @@ check("secrets are never sent back", any("secret-value" in json.dumps(v) for v i
 check("each platform shows the address to register", apps["tiktok"]["redirect"], BASE + "/oauth/tiktok/callback")
 r = a.put("/api/apps", json={"platform": "tiktok", "client_id": "", "client_secret": "tiktok-secret-value2"}, headers=ORIGIN)
 check("a new secret alone keeps the saved id", accounts.app_keys("tiktok"), ("awtiktokkey123", "tiktok-secret-value2"))
-check("everyone can connect now", b.get("/api/status").json()["connect"], {"youtube": True, "instagram": True, "tiktok": True})
+check("everyone can connect now", b.get("/api/status").json()["connect"], {"facebook": False, "youtube": True, "instagram": True, "tiktok": True})
 
 # ---- the platforms, as stand-ins
 class R:

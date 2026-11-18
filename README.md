@@ -165,3 +165,9 @@ If PeakCut Studio fits your workflow, **star the repository**, try a video you o
 ## Credits and license
 
 The original [PeakCut](https://github.com/haziqahmedqasmi/PeakCut) engine is by **Haziq Ahmed Qasmi**. PeakCut Studio adds the React interface and local browser connector. See [ATTRIBUTION.md](ATTRIBUTION.md), [MIT license](LICENSE), and the preserved third-party notices. Clip content you own or are authorized to use, and follow each platform’s publishing rules.
+
+### Facebook Page Reels and TikTok inbox uploads
+
+Facebook Page Reels are a separate destination with their own Meta authorization. The connection screen requests Page listing, engagement reading and publishing permissions. Only creator-selected Pages receive qualifying clips; Page Reels are public. The queue preserves Meta’s video ID across retries and waits for publication confirmation. See [Facebook setup and publishing](docs/FACEBOOK-PUBLISHING.md).
+
+TikTok’s inbox option sends the file from PeakCut to TikTok. Open the TikTok Inbox upload notification, review the clip and tap Post; you do not need to upload the file yourself. This is shown as **Finish in TikTok**, not a completed public post. Fully automatic public TikTok posting still requires TikTok’s app review.

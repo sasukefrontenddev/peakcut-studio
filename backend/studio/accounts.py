@@ -32,8 +32,10 @@ IG_UNIFIED = "https://graph.facebook.com/v27.0"
 IG_UPLOAD = "https://rupload.facebook.com/ig-api-upload/v21.0"
 IG_SCOPES = "instagram_business_basic,instagram_business_content_publish"
 TT = "https://open.tiktokapis.com/v2"
+FB = "https://graph.facebook.com/v27.0"
+FB_SCOPES = "pages_show_list,pages_read_engagement,pages_manage_posts"
 TT_SCOPES = "user.info.basic,video.publish,video.upload"
-PLATFORM_NAMES = {"youtube": "YouTube", "instagram": "Instagram", "tiktok": "TikTok"}
+PLATFORM_NAMES = {"youtube": "YouTube", "instagram": "Instagram", "tiktok": "TikTok", "facebook": "Facebook"}
 
 
 def _dir() -> Path:
@@ -69,10 +71,10 @@ def _write(name, data):
 
 # ------------------------------------------------------------------ the server's apps with each platform
 # name -> (what the platform calls the id, what it calls the secret, .env names for both)
-APPS = {"google": ("Client ID", "Client secret", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
+APPS = {"facebook": ("Meta app ID", "Meta app secret", "PEAKCUT_FB_APP_ID", "PEAKCUT_FB_APP_SECRET"), "google": ("Client ID", "Client secret", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
         "instagram": ("Instagram app ID", "Instagram app secret", "PEAKCUT_IG_APP_ID", "PEAKCUT_IG_APP_SECRET"),
         "tiktok": ("Client key", "Client secret", "PEAKCUT_TIKTOK_CLIENT_KEY", "PEAKCUT_TIKTOK_CLIENT_SECRET")}
-APP_FOR = {"youtube": "google", "instagram": "instagram", "tiktok": "tiktok"}
+APP_FOR = {"facebook": "facebook", "youtube": "google", "instagram": "instagram", "tiktok": "tiktok"}
 _apps_seen = {"at": None, "data": {}}
 
 
@@ -124,7 +126,7 @@ def apps_public() -> dict:
                          "https": redirect_for(platform).startswith("https://"),
                          "relay": bool(social.callback_origin()), "media_ready": bool(social.media_origin()),
                          "from_dashboard": bool((_apps_saved().get(name) or {}).get("id"))}
-        if platform == "instagram":
+        if platform in ("instagram", "facebook"):
             out[platform]["config_id"] = (_apps_saved().get(name) or {}).get("config_id", "")
     return out
 
@@ -138,8 +140,8 @@ def save_app(platform: str, cid: str, secret: str, config_id=None) -> dict:
     old = _apps_saved().get(name) or {}
     if config_id is not None:
         config_id = str(config_id).strip()
-        if platform != "instagram" or (config_id and not re.fullmatch(r"[0-9]{5,40}", config_id)):
-            raise ValueError("Paste the Instagram login configuration ID exactly as Meta shows it.")
+        if platform not in ("instagram", "facebook") or (config_id and not re.fullmatch(r"[0-9]{5,40}", config_id)):
+            raise ValueError("Paste the Meta login configuration ID exactly as Meta shows it.")
     if not cid and not secret and not (config_id is not None and old.get("id")):
         raise ValueError(f"Paste the {APPS[name][0]} and {APPS[name][1]}.")
     cid = cid or old.get("id", "")                # only a new secret typed: keep the saved id
@@ -151,7 +153,7 @@ def save_app(platform: str, cid: str, secret: str, config_id=None) -> dict:
     with _lock:
         data = dict(_apps_saved())
         data[name] = {"id": cid, "secret": secret}
-        if platform == "instagram":
+        if platform in ("instagram", "facebook"):
             data[name]["config_id"] = config_id if config_id is not None else old.get("config_id", "")
         tmp = _apps_file().with_suffix(".tmp")
         tmp.write_text(json.dumps(data), encoding="utf-8")
@@ -190,6 +192,11 @@ def connect_url(platform: str) -> str:
         return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode({
             "client_id": cid, "redirect_uri": redirect, "response_type": "code", "scope": YT_SCOPES,
             "access_type": "offline", "prompt": "consent", "state": state})
+    if platform == "facebook":
+        options = {"client_id": cid, "redirect_uri": redirect, "response_type": "code", "state": state}
+        config_id = (_apps_saved().get("facebook") or {}).get("config_id")
+        options.update({"config_id": config_id} if config_id else {"scope": FB_SCOPES})
+        return "https://www.facebook.com/v27.0/dialog/oauth?" + urlencode(options)
     if platform == "instagram":
         config_id = (_apps_saved().get("instagram") or {}).get("config_id")
         if config_id:
@@ -207,7 +214,7 @@ def connect_finish(platform: str, code: str, state: str) -> dict:
     code = (code or "").split("#")[0]           # Instagram adds "#_" to the code
     if not code:
         raise ValueError("The platform did not send a sign-in code. Try again.")
-    return {"youtube": _youtube_finish, "instagram": _instagram_finish, "tiktok": _tiktok_finish}[platform](code)
+    return {"youtube": _youtube_finish, "instagram": _instagram_finish, "tiktok": _tiktok_finish, "facebook": _facebook_finish}[platform](code)
 
 
 # ------------------------------------------------------------------ links the platforms can fetch a clip from
@@ -683,3 +690,112 @@ def tiktok_upload(acc, path: Path, caption: str, privacy: str = "public"):
         if "unaudited" not in str(getattr(e, "code", "")):
             raise
         return tiktok_inbox_upload(acc, path)
+
+
+# ------------------------------------------------------------------ Facebook Pages (Reels)
+class FacebookPublishingPending(RuntimeError):
+    """Meta accepted the publish request, but has not confirmed a public Reel yet."""
+
+
+class FacebookSetupRequired(RuntimeError):
+    pass
+
+
+def _facebook_finish(code):
+    cid, secret = app_keys("facebook")
+    short = _check(httpx.get(f"{FB}/oauth/access_token", params={
+        "client_id": cid, "client_secret": secret, "redirect_uri": redirect_for("facebook"), "code": code},
+        timeout=30), "Facebook sign-in").json()
+    long = _check(httpx.get(f"{FB}/oauth/access_token", params={
+        "grant_type": "fb_exchange_token", "client_id": cid, "client_secret": secret,
+        "fb_exchange_token": short["access_token"]}, timeout=30), "Keeping the Facebook sign-in").json()
+    headers = {"Authorization": "Bearer " + long["access_token"]}
+    pages, after = [], ""
+    for _ in range(20):
+        result = _check(httpx.get(f"{FB}/me/accounts", params={"fields": "id,name,access_token,tasks", "limit": 100,
+            **({"after": after} if after else {})}, headers=headers, timeout=30), "Reading your Facebook Pages").json()
+        pages.extend(result.get("data", []))
+        paging = result.get("paging") or {}
+        after = (paging.get("cursors") or {}).get("after", "")
+        if not paging.get("next") or not after:
+            break
+    allowed = [p for p in pages if set(p.get("tasks") or []) & {"CREATE_CONTENT", "MANAGE", "PROFILE_PLUS_CREATE_CONTENT"}
+               and re.fullmatch(r"[0-9]+", str(p.get("id", ""))) and p.get("access_token")]
+    if not allowed:
+        raise ValueError("No publishable Facebook Page was shared. Connect again, select your Page and allow content publishing.")
+    saved = []
+    for page in allowed:
+        acc = {"id": "fb_" + page["id"], "platform": "facebook", "name": str(page["name"])[:100],
+               "page_id": page["id"], "token": page["access_token"], "added": time.time(),
+               "detail": "Facebook Page · Reels are public"}
+        _put(acc)
+        saved.append(acc)
+    return saved[0]
+
+
+def facebook_upload(acc, path: Path, title: str, caption: str, state=None, save_state=None):
+    """Upload directly to Meta. Keep the video id across queue retries to avoid duplicate Reels."""
+    state = state if state is not None else {}
+    save_state = save_state or (lambda: None)
+    page_id = str(acc.get("page_id", ""))
+    if not re.fullmatch(r"[0-9]+", page_id) or not acc.get("token"):
+        raise FacebookSetupRequired("Connect your Facebook Page again in Settings.")
+    headers = {"Authorization": "Bearer " + acc["token"]}
+    edge = f"{FB}/{page_id}/video_reels"
+    existing = bool(state.get("video_id"))
+    if not existing:
+        from . import media
+        meta = media.probe(path)
+        if not 3 <= meta["duration"] <= 90:
+            raise FacebookSetupRequired("Facebook Reels need a video between 3 and 90 seconds.")
+        if meta["width"] < 540 or meta["height"] < 960 or abs(meta["width"] / meta["height"] - 9 / 16) > 0.03:
+            raise FacebookSetupRequired("Facebook Reels need a portrait 9:16 clip, at least 540 × 960.")
+        result = _check(httpx.post(edge, data={"upload_phase": "start"}, headers=headers, timeout=60),
+                        "Starting the Facebook Reel").json()
+        vid = str(result.get("video_id", ""))
+        if not re.fullmatch(r"[0-9]+", vid):
+            raise RuntimeError("Facebook did not return a valid video id.")
+        state.update(video_id=vid, phase="created")
+        save_state()
+    vid = state["video_id"]
+    def status():
+        data = _check(httpx.get(f"{FB}/{vid}", params={"fields": "status"}, headers=headers, timeout=30),
+                      "Checking the Facebook Reel").json().get("status") or {}
+        if data.get("video_status") in ("error", "expired", "upload_failed") or any(
+                (data.get(k) or {}).get("status") == "error" for k in ("uploading_phase", "processing_phase", "publishing_phase")):
+            raise FacebookSetupRequired("Facebook rejected the Reel. Check its format and reconnect the Page if its access changed.")
+        return data
+    current = status() if existing else {}
+    if (current.get("publishing_phase") or {}).get("publish_status") == "published":
+        return vid, f"https://www.facebook.com/reel/{vid}"
+    uploading = current.get("uploading_phase") or {}
+    if state.get("phase") == "created" and uploading.get("status") in ("completed", "complete"):
+        state["phase"] = "uploaded"
+        save_state()
+    if state.get("phase") == "created":
+        offset = min(path.stat().st_size, max(0, int(uploading.get("bytes_transfered") or 0)))
+        # Fixed Meta host: never send the Page token to an upload URL returned by another service.
+        with path.open("rb") as source:
+            source.seek(offset)
+            uploaded = _check(httpx.post(f"https://rupload.facebook.com/video-upload/v27.0/{vid}",
+                content=source.read(), headers={"Authorization": "OAuth " + acc["token"], "offset": str(offset),
+                "file_size": str(path.stat().st_size), "Content-Type": "application/octet-stream"}, timeout=900),
+                "Uploading the Facebook Reel").json()
+        if not uploaded.get("success"):
+            raise RuntimeError("Facebook did not confirm receiving the video.")
+        state["phase"] = "uploaded"
+        save_state()
+    if state["phase"] == "uploaded":
+        state["phase"] = "finishing"  # persist before submitting; never start a second video on an uncertain response
+        save_state()
+        done = _check(httpx.post(edge, data={"upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED",
+                     "title": title[:100], "description": caption[:5000]}, headers=headers, timeout=60),
+                     "Publishing the Facebook Reel").json()
+        if not done.get("success"):
+            raise FacebookSetupRequired("Facebook did not accept the Reel publication. Check the Page in Meta Business Suite.")
+    for _ in range(15):
+        current = status()
+        if (current.get("publishing_phase") or {}).get("publish_status") == "published":
+            return vid, f"https://www.facebook.com/reel/{vid}"
+        time.sleep(2)
+    raise FacebookPublishingPending("Facebook is still processing this Reel; PeakCut will check the same video again.")

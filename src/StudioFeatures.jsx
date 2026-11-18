@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
 import { api, send, localEngineRoute, fullStudioUrl } from "./api";
 
-const names = { youtube: "YouTube", instagram: "Instagram", tiktok: "TikTok" };
+const names = { youtube: "YouTube", instagram: "Instagram", tiktok: "TikTok", facebook: "Facebook" };
 const guides = {
+  facebook: {
+    url: "https://developers.facebook.com/apps/",
+    steps: [
+      "Use a Meta app with Facebook Login for Business and the Facebook Pages publishing use case.",
+      "Request pages_show_list, pages_read_engagement and pages_manage_posts. Register the HTTPS callback below.",
+      "Connect with the Facebook profile that manages your Page, then share only the Pages you want PeakCut to use.",
+    ],
+    note: "Facebook Page Reels are public. PeakCut uploads directly to Meta and tracks Facebook separately from Instagram. Only approved, selected creator destinations receive clips.",
+  },
   youtube: {
     url: "https://console.cloud.google.com/apis/credentials",
     steps: [
@@ -28,7 +37,7 @@ const guides = {
       "Request user.info.basic, video.publish and video.upload. Register the HTTPS redirect address below. Reconnect an existing account to grant inbox-upload permission.",
       "Complete TikTok’s app review and audit for public direct posting.",
     ],
-    note: "The free HTTPS callback returns sign-in to your paired local engine. Videos upload directly from your computer. TikTok still requires its developer-app review; unaudited apps are restricted to private posts.",
+    note: "PeakCut can upload a clip to your TikTok inbox. Open the upload notification, review the clip, then tap Post. No manual file upload is needed. Fully automatic public posting requires TikTok app review.",
   },
 };
 function ErrorText({ error }) {
@@ -76,7 +85,7 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
         await send(
           "/apps",
           { platform: p, client_id: id, client_secret: secret,
-            ...(p === "instagram" ? { config_id: configId } : {}) },
+            ...(["instagram", "facebook"].includes(p) ? { config_id: configId } : {}) },
           "PUT",
         ),
       );
@@ -110,7 +119,7 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
           <section className="social-platform" key={p}>
             <div className="social-platform-head">
               <span className={`platform-icon ${p}`}>
-                {p === "youtube" ? "▷" : p === "instagram" ? "◎" : "♪"}
+                {p === "youtube" ? "▷" : p === "instagram" ? "◎" : p === "facebook" ? "f" : "♪"}
               </span>
               <div>
                 <h3>{name}</h3>
@@ -214,7 +223,7 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
                       ? st.media_ready
                         ? "Instagram clip relay is ready. Only expiring signed clip links can be fetched; your dashboard stays private."
                         : "Sign-in is ready. The free Instagram clip relay is offline; restart PeakCut Engine before publishing."
-                      : "TikTok uploads directly from your computer. No public video server or paid hosting plan is needed."
+                      : `${name} uploads directly from your computer. No public video server or paid hosting plan is needed.`
                     : "Restart the updated PeakCut Engine to enable the included free HTTPS callback. No paid plan is needed."}
                 </p>
                 <p>
@@ -245,12 +254,12 @@ export function SocialConnections({ accounts, connection, refresh, notify }) {
                   />
                 </label>
                 <p className="muted">{guides[p].note}</p>
-                {p === "instagram" && (
+                {["instagram", "facebook"].includes(p) && (
                   <label>
-                    Unified Login configuration ID
+                    Meta Login configuration ID
                     <input value={configId} onChange={(e) => setConfigId(e.target.value)}
                       autoComplete="off" inputMode="numeric"
-                      placeholder="Leave empty only for an older Instagram Login app" />
+                      placeholder="Optional for Facebook Login; required for Instagram Unified Login" />
                   </label>
                 )}
                 <div className="feature-fields">
@@ -502,7 +511,7 @@ export function ClipActions({ clip, job, accounts, refresh, notify }) {
           <p className="muted">
             Posting uses this clip’s title, description and hashtags.
             Visibility, spacing, and daily limits come from its creator
-            settings. Public posting also depends on platform approval.
+            settings. Facebook Page Reels are always public; do not select Facebook for private clips. TikTok inbox uploads need you to finish publishing in TikTok.
           </p>
           <div className="feature-actions">
             <button
@@ -826,6 +835,7 @@ export function CreatorSettings({ creator, accounts, refresh, notify }) {
         </label>
       ))}
       <h3>Auto-post destinations</h3>
+      <p className="muted">Facebook Page Reels are public. TikTok uploads arrive in your inbox for you to review and post. Only checked destinations receive qualifying clips.</p>
       {accounts.length ? (
         accounts.map((a) => (
           <label className="feature-check" key={a.id}>

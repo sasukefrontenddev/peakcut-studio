@@ -13,7 +13,7 @@ export default function OAuthReturn() {
     started.current = true;
     window.history.replaceState({}, "", window.location.pathname);
     const finish = async () => {
-      if (!["instagram", "tiktok", "youtube"].includes(platform))
+      if (!["instagram", "tiktok", "youtube", "facebook"].includes(platform))
         throw new Error("Unknown social platform.");
       const state = params.get("state"),
         expected = sessionStorage.getItem("peakcut-social-" + platform);

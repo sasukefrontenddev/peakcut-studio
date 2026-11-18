@@ -33,6 +33,6 @@ test('creator form exposes auto-post destinations, scoring, spacing and live con
 });
 test('account screen explains local HTTPS blockers and provides all platform setup entries',()=>{
  const html=render('SocialConnections',{accounts:[],connection:'offline'});
- for(const name of ['YouTube','Instagram','TikTok','Activate the free connection','Set up'])assert.ok(html.includes(name),name);
+ for(const name of ['YouTube','Instagram','TikTok','Facebook','Activate the free connection','Set up'])assert.ok(html.includes(name),name);
  assert.ok(!html.includes('Connect YouTube'));
 });

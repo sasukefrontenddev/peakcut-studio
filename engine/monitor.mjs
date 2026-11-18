@@ -34,7 +34,7 @@ export function summarize(overview, jobs, accounts, creators, now = Date.now()) 
       creators:creators.length, auto_post:rows.filter(r=>r.autopost).length,
       watching:creators.filter(c=>c.auto_watch).length, recording:Number(overview.recording)||0,
       clips_today:sum('clips_today'), posted_today:sum('posted_today'), views:sum('views') },
-    platforms:['youtube','instagram','tiktok'].map(platform=>({
+    platforms:['youtube','instagram','tiktok','facebook'].map(platform=>({
       platform, connected:accounts.some(a=>a.platform===platform),
       accounts:accounts.filter(a=>a.platform===platform).map(a=>String(a.name).slice(0,80)),
       recent_posted:posts.filter(p=>p.platform===platform&&p.status==='posted').length,

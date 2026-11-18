@@ -66,6 +66,12 @@ def enqueue(job, clip, account_ids, now=False) -> list:
                    and p["status"] in OPEN + ("posted", "needs_action") for p in _mine()):
                 continue  # never post the same clip to the same account twice
             due = time.time() if now else _next_slot(aid, c["post_gap_min"], c["daily_cap"])
+            if acc["platform"] == "facebook":
+                # Meta caps API Reels at 30 per Page in a rolling 24-hour window, including across creators.
+                times = sorted(p.get("posted_at") or p["due_at"] for p in _mine()
+                               if p["account"] == aid and p["status"] in OPEN + ("posted",))
+                while len([t for t in times if due - 86400 < t <= due]) >= 30:
+                    due = min(t for t in times if due - 86400 < t <= due) + 86400 + 1
             p = {"id": secrets.token_hex(8), "user": ctx.uid(), "job": job["id"], "clip": clip["id"], "creator": job["creator"],
                  "account": aid, "account_name": acc["name"], "platform": acc["platform"], "status": "scheduled",
                  "due_at": due, "created": time.time(), "title": clip.get("title") or clip.get("hook") or "Clip",
@@ -111,12 +117,18 @@ def _post(p):
             rid, url = accounts.youtube_upload(acc, path, title, cap + "\n\n#Shorts", clip.get("hashtags", []), creator["privacy"])
         elif acc["platform"] == "instagram":
             rid, url = accounts.instagram_upload(acc, path, f"{title}\n\n{cap}", job["id"])
+        elif acc["platform"] == "facebook":
+            if creator["privacy"] != "public":
+                raise accounts.FacebookSetupRequired("Facebook Page Reels are public. Choose public publishing for this creator before posting to Facebook.")
+            rid, url = accounts.facebook_upload(acc, path, title, cap, state=p.setdefault("facebook_upload", {}), save_state=_save)
         elif acc["platform"] == "tiktok":
             rid, url = accounts.tiktok_upload(acc, path, f"{title}\n\n{cap}", creator["privacy"])
         else:
             raise RuntimeError("That kind of account is no longer supported.")
         p.update(status="posted", posted_at=time.time(), remote_id=rid, url=url, error=None)
         creators.log(p["creator"], f"Posted to {acc['name']}: {title}")
+    except accounts.FacebookPublishingPending as e:
+        p.update(status="scheduled", due_at=time.time() + 90, error=None, note=str(e))
     except accounts.TikTokInboxDelivered as e:
         p.update(status="needs_action", uploaded_at=time.time(), remote_id=e.publish_id, url="",
                  error=None, note=str(e))
@@ -124,7 +136,7 @@ def _post(p):
     except Exception as e:  # noqa: BLE001
         p["tries"] += 1
         p["error"] = str(e)[-300:]
-        if p["tries"] < 3 and clip and acc and not isinstance(e, accounts.TikTokSetupRequired):
+        if p["tries"] < 3 and clip and acc and not isinstance(e, (accounts.TikTokSetupRequired, accounts.FacebookSetupRequired)):
             p.update(status="scheduled", due_at=time.time() + 600)  # try again in 10 minutes
         else:
             p["status"] = "failed"
