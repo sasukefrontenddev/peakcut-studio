@@ -175,3 +175,7 @@ TikTok’s inbox option sends the file from PeakCut to TikTok. Open the TikTok I
 ### Captions and audio/video timing
 
 Toggle **Show spoken captions** in creator settings, new-project options, or the clip editor. Clip edits require a re-render. Optional local multilingual recognition uses the clip’s actual audio, supports Hindi/Urdu with Roman-letter captions, and needs no API credits. See [caption setup and sync verification](docs/CAPTION-SYNC.md).
+
+### Creator names and social hashtags
+
+Social posts automatically include the creator’s name, the clip’s hook, a relevant engagement question and up to five focused hashtags. Set **Creator hashtags** in creator settings to prioritize that creator’s tags, and check **Publish clip → Post caption preview** before posting. This does not change spoken subtitles or make extra AI calls. See [social caption behavior](docs/SOCIAL-CAPTIONS.md).

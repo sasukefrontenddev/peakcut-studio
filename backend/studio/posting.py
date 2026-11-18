@@ -6,7 +6,7 @@ from pathlib import Path
 
 import json
 
-from . import accounts, alerts, config, creators, ctx, jobs, live
+from . import accounts, alerts, config, creators, ctx, jobs, live, postcopy
 
 _lock = threading.RLock()
 _FILE = config.DATA_DIR / "posts.json"
@@ -97,8 +97,7 @@ def on_clip_ready(job, clip):
 
 
 def _caption(clip, creator):
-    tags = " ".join("#" + h for h in clip.get("hashtags", []))
-    return "\n\n".join(x for x in (clip.get("description", ""), tags, creator.get("post_footer", "")) if x)
+    return postcopy.build(clip, creator)["caption"]
 
 
 def _post(p):
@@ -112,17 +111,18 @@ def _post(p):
             raise RuntimeError("That account was disconnected.")
         path = Path(job["dir"]) / "clips" / clip["file"]
         creator = creators.get(job["creator"]) or dict(creators.DEFAULTS, name="clips")
-        title, cap = clip.get("title") or clip.get("hook") or "Clip", _caption(clip, creator)
+        copy = postcopy.build(clip, creator)
+        title, cap = copy["title"], copy["caption"]
         if acc["platform"] == "youtube":
-            rid, url = accounts.youtube_upload(acc, path, title, cap + "\n\n#Shorts", clip.get("hashtags", []), creator["privacy"])
+            rid, url = accounts.youtube_upload(acc, path, title, cap, copy["hashtags"], creator["privacy"])
         elif acc["platform"] == "instagram":
-            rid, url = accounts.instagram_upload(acc, path, f"{title}\n\n{cap}", job["id"])
+            rid, url = accounts.instagram_upload(acc, path, cap, job["id"])
         elif acc["platform"] == "facebook":
             if creator["privacy"] != "public":
                 raise accounts.FacebookSetupRequired("Facebook Page Reels are public. Choose public publishing for this creator before posting to Facebook.")
             rid, url = accounts.facebook_upload(acc, path, title, cap, state=p.setdefault("facebook_upload", {}), save_state=_save)
         elif acc["platform"] == "tiktok":
-            rid, url = accounts.tiktok_upload(acc, path, f"{title}\n\n{cap}", creator["privacy"])
+            rid, url = accounts.tiktok_upload(acc, path, cap, creator["privacy"])
         else:
             raise RuntimeError("That kind of account is no longer supported.")
         p.update(status="posted", posted_at=time.time(), remote_id=rid, url=url, error=None)

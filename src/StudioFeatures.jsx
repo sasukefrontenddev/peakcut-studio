@@ -379,6 +379,16 @@ export function ClipActions({ clip, job, accounts, refresh, notify }) {
       setBusy(false);
     }
   }
+  const [postPreview, setPostPreview] = useState(null);
+  useEffect(() => {
+    if (mode !== "post") return;
+    let current = true;
+    setPostPreview(null);
+    api(`/jobs/${job.id}/clips/${clip.id}/post-preview`).then(data => {
+      if (current) setPostPreview(data);
+    }).catch(e => { if (current) setError(e.message); });
+    return () => { current = false; };
+  }, [mode, job.id, clip.id, clip.version]);
   const posts = Object.entries(clip.posts || {});
   return (
     <div className="feature-stack">
@@ -499,6 +509,9 @@ export function ClipActions({ clip, job, accounts, refresh, notify }) {
       )}
       {mode === "post" && (
         <div className="feature-stack">
+          <h4>Post caption preview</h4>
+          <p className="muted">Creator credit, the clip hook, a relevant question and focused hashtags are added automatically.</p>
+          <pre style={{whiteSpace:"pre-wrap",fontFamily:"inherit",overflowWrap:"anywhere"}}>{postPreview?.caption || "Loading caption preview…"}</pre>
           <h4>Choose destination accounts</h4>
           {accounts.length ? (
             accounts.map((a) => (
@@ -823,6 +836,12 @@ export function CreatorSettings({ creator, accounts, refresh, notify }) {
             value={form.trigger_words || ""}
             onChange={(e) => field("trigger_words", e.target.value)}
           />
+        </label>
+        <label>
+          Creator hashtags
+          <input value={form.creator_hashtags || ""} onChange={e => field("creator_hashtags",e.target.value)}
+            placeholder="#DuckyBhai #DuckyBhaiClips #DuckyReloaded" />
+          <small>Up to three creator tags are prioritized, with room for relevant clip topics. Leave blank to use the creator’s name.</small>
         </label>
         <label>
           Posting footer

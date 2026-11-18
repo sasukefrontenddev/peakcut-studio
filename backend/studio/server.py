@@ -1468,6 +1468,16 @@ def apps_put(request: Request, body: dict = Body(...)):
         raise HTTPException(400, str(e))
 
 
+@app.get("/api/jobs/{jid}/clips/{cid}/post-preview")
+def preview_post(jid: str, cid: str):
+    job = jobs.get(jid)
+    clip = next((c for c in job["clips"] if c["id"] == cid), None) if job else None
+    if not clip:
+        raise HTTPException(404, "That clip was not found.")
+    from . import postcopy
+    return postcopy.build(clip, creators.get(job["creator"]) or {})
+
+
 @app.post("/api/posts")
 def add_posts(body: dict = Body(...)):
     job = jobs.get(str(body.get("job")))

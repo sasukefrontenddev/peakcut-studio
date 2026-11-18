@@ -19,7 +19,7 @@ DEFAULTS = {"name": "", "channel": "", "style": "bounce", "layout": "blur", "cap
             "plan": "free", "decide_mode": "both", "must_clip_min": 0, "min_gap_min": 2,
             "trigger_words": "clip that, clip it",
             "autopost": False, "accounts": [], "post_min_score": 75, "post_gap_min": 45, "daily_cap": 6,
-            "privacy": "public", "post_footer": "", "rate_per_1k": 0.0, "channels": {}}
+            "privacy": "public", "post_footer": "", "creator_hashtags": "", "rate_per_1k": 0.0, "channels": {}}
 PLATFORMS = ("youtube", "twitch", "kick")
 
 
