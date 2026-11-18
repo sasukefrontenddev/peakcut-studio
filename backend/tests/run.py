@@ -55,6 +55,7 @@ def main() -> int:
                 ("Hindi and Urdu captions in Roman letters", ["tests/test_roman.py"]),
                 ("connecting YouTube, Instagram and TikTok", ["tests/test_connect.py"]),
                 ("Facebook Page Reels", ["tests/test_facebook.py"]),
+                ("audio-video sync and caption controls", ["tests/test_render_sync.py"]),
                 ("the new-version notice", ["tests/test_updates.py"]),
                 ("no limits by default", ["tests/test_limits.py"]),
                 ("captions never overlap, stuck clips, sentence endings", ["tests/test_stuck.py"]),

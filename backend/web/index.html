@@ -1850,7 +1850,7 @@ function drawCreatorForm() {
         <label class="f span">Always clip the last 30 seconds when someone says<input data-k="trigger_words" value="${esc(c.trigger_words)}" placeholder="clip that, clip it"><small class="sub" style="font-weight:400">Separate phrases with commas. Matched on the transcript, so it needs no AI call.</small></label>
       </div></div>
     <div class="card"><h2>Clips</h2><p class="help">How this creator's clips look.</p>
-      <div class="fields"><label class="f">Caption style<select data-k="style">${opts(S.status.styles, c.style)}</select></label>
+      <div class="fields"><label class="sw span"><input type="checkbox" data-k="captions" ${c.captions !== false ? "checked" : ""}><span>Show spoken captions on new clips</span></label><label class="f">Caption style<select data-k="style">${opts(S.status.styles, c.style)}</select></label>
         <label class="f">Layout<select data-k="layout">${opts(S.status.layouts, c.layout)}</select></label>
         <label class="f">Shortest clip (seconds)<input data-k="min_len" type="number" value="${c.min_len}"></label>
         <label class="f">Longest clip (seconds)<input data-k="max_len" type="number" value="${c.max_len}"></label>
@@ -2133,7 +2133,7 @@ function drawClipDlg(full) {
         <div class="job-head" style="margin:0"><div><span class="badge ${scoreCls(c.score)}" style="position:static">${c.judges ? "Words " + c.judges.words + (c.judges.reaction ? " · Reaction " + c.judges.reaction : "") : c.score ? "Score " + c.score : "Clipped by hand"}</span>
           <p class="sub" style="margin-top:8px">${esc(c.reason || "")}</p></div><button class="btn icon ghost" data-act="closedlg" aria-label="Close">${ic("x")}</button></div>
         <h3>On the video</h3>
-        <label class="f">Big text<input data-f="hook" value="${esc(c.hook)}"></label>
+        <label class="sw"><input type="checkbox" data-f="captions" ${c.captions !== false ? "checked" : ""}><span>Show spoken captions</span></label><label class="f">Big text<input data-f="hook" value="${esc(c.hook)}"></label>
         <div class="two"><label class="f">Caption style<select data-f="style">${opts(S.status.styles, c.style)}</select></label>
           <label class="f">Layout<select data-f="layout">${opts(S.status.layouts, c.layout)}</select></label></div>
         <div class="two"><label class="f">Start (seconds)<input data-f="start" type="number" step="0.5" value="${c.start}"></label>
@@ -2437,7 +2437,7 @@ document.addEventListener("click", async e => {
       await api(`/api/accounts/${d.id}`, {method:"DELETE"}); await tick(); return drawSettings();
     }
     if (a === "remake") {
-      const body = {}; $$("#clipdlg [data-f]").forEach(i => body[i.dataset.f] = i.type === "number" ? Number(i.value) : i.value);
+      const body = {}; $$("#clipdlg [data-f]").forEach(i => body[i.dataset.f] = i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value);
       await send(`/api/jobs/${D.jid}/clips/${D.cid}/render`, body); toast("Re-making the clip…", "ok"); return tick();
     }
     if (a === "postnow" || a === "postqueue") {

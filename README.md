@@ -171,3 +171,7 @@ The original [PeakCut](https://github.com/haziqahmedqasmi/PeakCut) engine is by 
 Facebook Page Reels are a separate destination with their own Meta authorization. The connection screen requests Page listing, engagement reading and publishing permissions. Only creator-selected Pages receive qualifying clips; Page Reels are public. The queue preserves Meta’s video ID across retries and waits for publication confirmation. See [Facebook setup and publishing](docs/FACEBOOK-PUBLISHING.md).
 
 TikTok’s inbox option sends the file from PeakCut to TikTok. Open the TikTok Inbox upload notification, review the clip and tap Post; you do not need to upload the file yourself. This is shown as **Finish in TikTok**, not a completed public post. Fully automatic public TikTok posting still requires TikTok’s app review.
+
+### Captions and audio/video timing
+
+Toggle **Show spoken captions** in creator settings, new-project options, or the clip editor. Clip edits require a re-render. Optional local multilingual recognition uses the clip’s actual audio, supports Hindi/Urdu with Roman-letter captions, and needs no API credits. See [caption setup and sync verification](docs/CAPTION-SYNC.md).

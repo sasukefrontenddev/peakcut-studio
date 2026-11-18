@@ -246,7 +246,7 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     out_dir.mkdir(parents=True, exist_ok=True)
     start, end = clip["start"], clip["end"]
     layout, fg_h, hook_y, cap_y = geometry(src_w, src_h, clip.get("layout", "blur"))
-    ass = build_ass(words, start, end, clip.get("hook", ""), clip.get("style", "bounce"),
+    ass = build_ass(words if clip.get("captions", True) else [], start, end, clip.get("hook", ""), clip.get("style", "bounce"),
                     clip.get("highlight_words", []), hook_y, cap_y)
     # The clip is made in a short work folder and moved into place afterwards. The caption step of ffmpeg cannot
     # open files whose full path is longer than 260 characters on Windows, which a data folder deep inside other
@@ -265,9 +265,17 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     (work / "f").mkdir()
     for f in config.FONTS_DIR.glob("*.ttf"):
         shutil.copyfile(f, work / "f" / f.name)
-    fc = _filter(layout, fg_h) + f"[v0]ass={name}.ass:fontsdir=f[v]"
-    base = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
-            "-filter_complex", fc, "-map", "[v]", "-map", "0:a:0", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
+    # Input-side seeking on copied live TS segments can leave video starting seconds after audio.
+    # Decode a pre-roll, then trim both tracks on the same source clock before subtitles and layout.
+    # copyts/start_at_zero keeps the shared container origin even when seeking into a long source.
+    cut = f"start={start:.6f}:end={end:.6f}"
+    fc = (f"[0:v]trim={cut},setpts=PTS-{start:.6f}/TB[clipv];"
+          + _filter(layout, fg_h).replace("[0:v]", "[clipv]")
+          + f"[v0]ass={name}.ass:fontsdir=f[v];"
+          + f"[0:a]atrim={cut},asetpts=PTS-{start:.6f}/TB,loudnorm=I=-14:TP=-1.5:LRA=11[aout]")
+    seek = ["-ss", f"{start - 30:.6f}"] if start > 30 else []
+    base = ["ffmpeg", "-y", "-v", "error", "-copyts", "-start_at_zero", *seek, "-i", str(src),
+            "-filter_complex", fc, "-map", "[v]", "-map", "[aout]", "-t", f"{end - start:.6f}",
             "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
     encoders = []
     if _qsv_ok is not False:

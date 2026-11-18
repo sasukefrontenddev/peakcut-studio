@@ -86,6 +86,7 @@ const defaults = {
   max_len: 60,
   style: "bounce",
   layout: "blur",
+  captions: true,
   quality: 720,
 };
 const stages = [
@@ -1626,6 +1627,10 @@ function ProjectForm({ creators, connection, onDone, notify }) {
           </span>
         </label>
       </div>
+      <label className="feature-check">
+        <input type="checkbox" checked={options.captions !== false} onChange={e => opt("captions",e.target.checked)} />
+        Show spoken captions
+      </label>
       <fieldset className="caption-picker">
         <legend>Caption style</legend>
         <div className="caption-options">

@@ -11,7 +11,7 @@ import traceback
 import uuid
 from pathlib import Path
 
-from . import brain, config, creators, ctx, load, media, render, roman, safe, transcribe, usage
+from . import brain, captions, config, creators, ctx, load, media, render, roman, safe, transcribe, usage
 
 class _FairQueue:
     """Whose video is next. Each person has their own line and the lines take turns, so someone who adds ten
@@ -107,7 +107,7 @@ _by_user: dict = {}                       # user -> {job id: job}: listing one p
 _lock = threading.RLock()
 on_clip_ready: list = []   # callbacks (job, clip), run once when a clip first finishes
 
-DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "layout": "blur", "quality": 720,
+DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "layout": "blur", "captions": True, "caption_language": "auto", "quality": 720,
             "range_start": None, "range_end": None}
 
 
@@ -123,6 +123,12 @@ def clean_options(options) -> dict:
         if k in LIMITS:
             lo, hi = LIMITS[k]
             v = max(lo, min(hi, int(float(v))))
+        elif k == "caption_language":
+            if v not in ("auto", "en", "hi", "ur"):
+                raise ValueError("Choose automatic, English, Hindi or Urdu captions.")
+        elif k == "captions":
+            if not isinstance(v, bool):
+                raise ValueError("Captions must be on or off.")
         elif k == "style":
             v = v if v in render.STYLES else DEFAULTS["style"]
         elif k == "layout":
@@ -281,7 +287,7 @@ def create(source: dict, options: dict, enqueue=True, creator=None, kind="video"
     c = creators.get(creator) if creator else None
     if c:
         d = creators.root(c["id"]) / ("live" if kind == "live" else "videos") / jid
-        base = {**DEFAULTS, **{k: c[k] for k in ("max_clips", "min_len", "max_len", "style", "layout")}}
+        base = {**DEFAULTS, **{k: c[k] for k in ("max_clips", "min_len", "max_len", "style", "layout", "captions", "caption_language")}}
     else:
         d, base, creator = config.user_dir(ctx.uid()) / "jobs" / jid, dict(DEFAULTS), None
     d.mkdir(parents=True)
@@ -349,6 +355,12 @@ def request_render(jid, cid, changes: dict):
         raise ValueError("Those times aren't valid.")
     if not 3 <= new["end"] - new["start"] <= 180:
         raise ValueError("A clip can be 3 to 180 seconds long.")
+    if "caption_language" in changes:
+        new["caption_language"] = clean_options({"caption_language": changes["caption_language"]})["caption_language"]
+    if "captions" in changes:
+        if not isinstance(changes["captions"], bool):
+            raise ValueError("Captions must be on or off.")
+        new["captions"] = changes["captions"]
     for k in ("hook", "title", "description", "style", "layout"):
         if k in changes:
             new[k] = str(changes[k])[:{"hook": 60, "title": 100, "description": 2000}.get(k, 20)]
@@ -371,10 +383,19 @@ def render_one(job, clip, words):
         if not clip.get("src"):
             clip["end"] = min(clip["end"], job["duration"])
         local = dict(clip, start=clip["start"] - off, end=clip["end"] - off, hook=roman.to_roman(clip.get("hook") or ""))
-        span = [round(clip["start"], 2), round(clip["end"], 2), "en2"]      # "en2": captions made always-English
-        if clip.get("fixed_for") == span and clip.get("fixed_words") and not any(
+        language = clip.get("caption_language", "auto")
+        method = "whisper-1:" + Path(config.env("PEAKCUT_CAPTION_MODEL")).name if captions.available() else "en3"
+        span = [round(clip["start"], 2), round(clip["end"], 2), method, language]      # invalidate older AI-rewritten captions
+        if not clip.get("captions", True):
+            raw = []
+        elif clip.get("fixed_for") == span and clip.get("fixed_words") and not any(
                 roman.needs_roman(w.get("w", "")) for w in clip["fixed_words"]):
             raw = clip["fixed_words"]          # already tidied for this exact span: no second AI call
+        elif captions.available():
+            heard, detected = captions.transcribe_clip(src, local["start"], local["end"], language)
+            raw = [dict(w, s=w["s"] + clip["start"], e=w["e"] + clip["start"]) for w in heard]
+            clip.update(fixed_words=raw, fixed_for=span, caption_source="local-whisper", caption_language_detected=detected,
+                        caption_note="" if heard else "No confident speech was recognized; uncertain captions were omitted.")
         else:
             raw = [w for w in words if clip["start"] - 1 <= w["s"] <= clip["end"] + 1]
             try:
@@ -671,7 +692,7 @@ def _run_job(job):
             notes.append(ai["note"])
         for c in found:
             c.update(id=f"clip{len(job['clips']) + 1:02d}", start=round(c["start"] + shift, 2),
-                     end=round(c["end"] + shift, 2), style=o["style"], layout=o["layout"], status="queued", version=0)
+                     end=round(c["end"] + shift, 2), style=o["style"], layout=o["layout"], captions=o.get("captions", True), caption_language=o.get("caption_language", "auto"), status="queued", version=0)
             job["clips"].append(c)
             futures.append((renders.submit(ctx.bind(make), c, list(words)), c))
         job["ai"] = {"model": model, "tokens": tokens, "note": "", "log": notes[-5:]}

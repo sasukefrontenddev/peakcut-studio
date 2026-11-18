@@ -362,6 +362,8 @@ export function ClipActions({ clip, job, accounts, refresh, notify }) {
     description: clip.description || "",
     style: clip.style || "bounce",
     layout: clip.layout || "blur",
+    captions: clip.captions !== false,
+    caption_language: clip.caption_language || "auto",
   }));
   async function act(fn, message) {
     setBusy(true);
@@ -380,6 +382,7 @@ export function ClipActions({ clip, job, accounts, refresh, notify }) {
   const posts = Object.entries(clip.posts || {});
   return (
     <div className="feature-stack">
+      {clip.caption_note && <p className="muted">{clip.caption_note}</p>}
       <div className="feature-actions">
         <button
           className="button outline"
@@ -467,6 +470,15 @@ export function ClipActions({ clip, job, accounts, refresh, notify }) {
               </select>
             </label>
           </div>
+          <label>Caption speech language
+            <select value={edit.caption_language} onChange={e=>setEdit({...edit,caption_language:e.target.value})}>
+              <option value="auto">Detect automatically</option><option value="en">English</option><option value="hi">Hindi / Hinglish</option><option value="ur">Urdu</option>
+            </select>
+          </label>
+          <label className="feature-check">
+            <input type="checkbox" checked={edit.captions} onChange={e => setEdit({...edit, captions:e.target.checked})} />
+            Show spoken captions
+          </label>
           <label>
             Description
             <textarea
@@ -834,6 +846,16 @@ export function CreatorSettings({ creator, accounts, refresh, notify }) {
           {label}
         </label>
       ))}
+      <label>Caption speech language
+        <select value={form.caption_language || "auto"} onChange={e=>field("caption_language",e.target.value)}>
+          <option value="auto">Detect automatically</option><option value="en">English</option><option value="hi">Hindi / Hinglish</option><option value="ur">Urdu</option>
+        </select>
+      </label>
+      <label className="feature-check">
+        <input type="checkbox" checked={form.captions !== false} onChange={e => field("captions",e.target.checked)} />
+        Show spoken captions on new clips
+      </label>
+      <p className="muted">This applies to new video and live clips. Existing clips can be changed in Edit clip and re-rendered. Hook titles are edited separately.</p>
       <h3>Auto-post destinations</h3>
       <p className="muted">Facebook Page Reels are public. TikTok uploads arrive in your inbox for you to review and post. Only checked destinations receive qualifying clips.</p>
       {accounts.length ? (

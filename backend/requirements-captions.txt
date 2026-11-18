@@ -1,0 +1,2 @@
+# Optional, install in a Python 3.12 environment for local multilingual captions.
+faster-whisper==1.2.1
