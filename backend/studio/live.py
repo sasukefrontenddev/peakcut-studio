@@ -70,6 +70,18 @@ def resolve(url: str) -> dict:
             "uploader": info.get("uploader") or info.get("channel") or ""}
 
 
+def capture_inputs(urls):
+    """Keep split live inputs on input zero's clock instead of zeroing each independently."""
+    args = []
+    for index, url in enumerate(urls):
+        if str(url).startswith(("https://", "http://")):
+            args += ["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "10"]
+        if index:
+            args += ["-isync", "0"]
+        args += ["-i", url]
+    return args
+
+
 def active():
     return [s for s in SESSIONS.values() if not s.finished and not s.user_stopped]
 
@@ -177,10 +189,8 @@ class Session:
             with self.lock:
                 self.seg_clock = max(self.seg_clock, self.samples / SR)
             p = f"p{self.part:02d}"
-            cmd = ["ffmpeg", "-v", "error", "-reconnect", "1", "-reconnect_streamed", "1",
-                   "-reconnect_delay_max", "10"]
-            for u in info["urls"]:
-                cmd += ["-i", u]
+            cmd = ["ffmpeg", "-v", "error", *capture_inputs(info["urls"])]
+            self.job["capture_sync"] = "input-clock-v2"
             a_in = "1:a:0" if len(info["urls"]) > 1 else "0:a:0"
             cmd += ["-map", "0:v:0", "-map", a_in, "-c", "copy", "-f", "segment", "-segment_time", str(SEG_SEC),
                     "-reset_timestamps", "1", "-segment_format", "mpegts", "-segment_list", f"{p}.csv",

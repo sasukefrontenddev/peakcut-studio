@@ -9,3 +9,18 @@ Optional local multilingual caption recognition uses Faster Whisper on the clipâ
 Caption speech language can be automatic, English, Hindi/Hinglish or Urdu. Hindi and Urdu text is rendered in Roman letters. Multilingual caption recognition is separate from the existing live clip-selection transcript. Recognition is still imperfect with overlapping voices, music, names and code-switching; choose the language explicitly when detection gets it wrong.
 
 Old AI-rewritten caption caches are invalidated. Prompt row labels are stripped and invented numbered words are rejected; genuine spoken numeric conversions remain supported. Re-render existing clips to rebuild cached captions.
+
+## Split live inputs
+
+YouTube can supply video and audio as separate live inputs with different start times.
+Normalizing both to zero independently loses that difference before clip rendering even
+starts. The recorder now uses FFmpeg input synchronization (`-isync 0`) for secondary
+inputs, keeping video input zero as the reference clock. Combined streams keep their
+existing timing. Each HTTP input also receives its own reconnect options.
+
+`tests/test_capture_sync.py` uses separate timestamped video and audio tracks: the old
+command makes the audible pulse approximately two seconds early. The synchronized
+command aligns the pulse with the visual flash, including after final clip rendering.
+A zero start time on both final tracks alone is not sufficient evidence of lip sync.
+Previously captured media does not retain the independent input origins, so this change
+cannot automatically recover the missing offset in old clips.
