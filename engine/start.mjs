@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createBridge } from "./bridge.mjs";
 import { startFreeTunnel } from "./social-tunnel.mjs";
 import { startMonitor } from "./monitor.mjs";
+import { keepEngineAwake } from "./keep-awake.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const localFile = resolve(root, ".engine-local.json");
@@ -27,6 +28,7 @@ const python =
 let backend;
 let ollama;
 let closing = false;
+const awakeGuard = keepEngineAwake();
 let socialTunnel;
 let widgetMonitor;
 if (local.ollama) {
@@ -176,7 +178,7 @@ if (local.cloudflared && local.remoteMonitor) {
   try {
     widgetMonitor = await startMonitor({root, cloudflared: local.cloudflared, remoteControl: local.remoteControl===true});
   } catch (e) {
-    console.log(e.code === "EADDRINUSE" ? "Reusing the read-only widget connection." : "Widget connection: " + e.message);
+    console.log(e.code === "EADDRINUSE" ? "Reusing the protected remote connection." : "Widget connection: " + e.message);
   }
 }
 const server = createBridge({ token });
@@ -201,12 +203,13 @@ server.listen(8767, "127.0.0.1", () => {
   console.log("Connect this browser: http://127.0.0.1:8767");
   console.log("Local connection: http://127.0.0.1:8767");
   console.log(
-    "\nKeep this window open while making clips. Press Control+C to stop.\n",
+    "\nKeep this window open while making clips. You can lock the screen; the Mac stays awake while PeakCut runs. Press Control+C to stop.\n",
   );
 });
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
     closing = true;
+    awakeGuard.stop();
     socialTunnel?.stop();
     widgetMonitor?.stop();
     server.close();

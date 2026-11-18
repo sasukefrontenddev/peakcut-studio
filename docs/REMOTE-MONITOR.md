@@ -19,3 +19,9 @@ New connections request `video.upload` as well as basic profile and Direct Post 
 An inbox upload is **not** public posting. The publishing queue shows **Finish in TikTok** and does not increment published counts. Open the TikTok inbox notification, review/edit the draft, and finish publishing there. PeakCut never changes your account visibility. Public unattended Direct Post still needs TikTok review/audit and compliance with its requirements; this code does not bypass that restriction.
 
 If a legacy connection lacks the upload permission, the queue reports a reconnect instruction and stops retrying that setup failure. Once an inbox upload exists, duplicate queue requests are blocked. Slow inbox processing is labeled unconfirmed rather than claimed as a published success.
+
+## Locked Mac and screen off
+
+On macOS, `npm run engine` starts Apple's built-in `caffeinate -i` guard for the engine process. It prevents idle system sleep while allowing the screen to lock or turn off normally. The guard ends when that engine process exits. Keep the engine window open, the computer powered and the internet connected.
+
+Lock Screen is supported. Logging out, manually selecting Sleep, shutting down, restarting, or closing a laptop lid can interrupt service. After a restart, sign in and start the engine again. This does not install a system-wide service or change your password/lock-screen protection.
