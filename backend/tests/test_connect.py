@@ -127,7 +127,7 @@ check("Instagram: Instagram's own page, with publishing permission", (loc.netloc
 check("Instagram: connected, with the #_ Instagram adds to the code removed", "connected=instagram" in back.headers["location"])
 loc, back = connect(b, "tiktok")
 q = parse_qs(loc.query)
-check("TikTok: TikTok's own page, asking to post", (loc.netloc, q["client_key"][0], q["scope"][0]), ("www.tiktok.com", "awtiktokkey123", "user.info.basic,video.publish"))
+check("TikTok: TikTok's own page, asking to post or upload an inbox draft", (loc.netloc, q["client_key"][0], q["scope"][0]), ("www.tiktok.com", "awtiktokkey123", "user.info.basic,video.publish,video.upload"))
 check("TikTok: connected", "connected=tiktok" in back.headers["location"])
 accs = {x["platform"]: x for x in b.get("/api/accounts").json()}
 check("all three accounts are listed with their names", (accs["youtube"]["name"], accs["instagram"]["name"], accs["tiktok"]["name"]),
@@ -174,10 +174,13 @@ with ctx.as_user(user.id):
     check("Instagram: published, with its link", (rid, url), ("media1", "https://www.instagram.com/reel/abc/"))
 
     uploads.clear(); tt.update(audited=False, status=0)
-    rid, url = accounts.tiktok_upload(ttacc, jd / "clip01.mp4", "My caption #fyp", "public")
-    check("TikTok: an app not yet reviewed posts privately instead of failing", (tt["init"]["post_info"]["privacy_level"], url), ("SELF_ONLY", ""))
-    check("TikTok: the whole file in one piece, with the right range", (len(uploads), uploads[0][2]["Content-Range"]), (1, "bytes 0-5999/6000"))
-    check("TikTok: the account says why posts are private", "private" in accounts.get(ttacc["id"]).get("detail", ""))
+    try:
+        accounts.tiktok_upload(ttacc, jd / "clip01.mp4", "My caption #fyp", "public")
+        check("TikTok: legacy connections must grant inbox-upload permission", False)
+    except accounts.TikTokSetupRequired as e:
+        check("TikTok: legacy connections get a clear reconnect instruction", "Reconnect TikTok" in str(e))
+    check("TikTok: an unaudited app does not silently change a public request to private", tt["init"]["post_info"]["privacy_level"], "PUBLIC_TO_EVERYONE")
+    check("TikTok: no bytes upload without the required permission", len(uploads), 0)
     tt.update(audited=True, status=0)
     rid, url = accounts.tiktok_upload(ttacc, jd / "clip01.mp4", "My caption", "public")
     check("TikTok: once reviewed, public, with the video's link", (tt["init"]["post_info"]["privacy_level"], url),

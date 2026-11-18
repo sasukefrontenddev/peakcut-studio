@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBridge } from "./bridge.mjs";
 import { startFreeTunnel } from "./social-tunnel.mjs";
+import { startMonitor } from "./monitor.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const localFile = resolve(root, ".engine-local.json");
@@ -27,6 +28,7 @@ let backend;
 let ollama;
 let closing = false;
 let socialTunnel;
+let widgetMonitor;
 if (local.ollama) {
   const aiReady = async () => {
     try {
@@ -170,6 +172,13 @@ if (local.cloudflared) {
     console.log("Free Instagram relay:", e.message);
   }
 }
+if (local.cloudflared && local.remoteMonitor) {
+  try {
+    widgetMonitor = await startMonitor({root, cloudflared: local.cloudflared});
+  } catch (e) {
+    console.log(e.code === "EADDRINUSE" ? "Reusing the read-only widget connection." : "Widget connection: " + e.message);
+  }
+}
 const server = createBridge({ token });
 server.on("error", (err) => {
   console.error(
@@ -184,6 +193,7 @@ server.on("error", (err) => {
   backend?.kill();
   ollama?.kill();
   socialTunnel?.stop();
+  widgetMonitor?.stop();
   process.exit(err.code === "EADDRINUSE" ? 0 : 1);
 });
 server.listen(8767, "127.0.0.1", () => {
@@ -198,6 +208,7 @@ for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
     closing = true;
     socialTunnel?.stop();
+    widgetMonitor?.stop();
     server.close();
     backend?.kill("SIGTERM");
     ollama?.kill("SIGTERM");

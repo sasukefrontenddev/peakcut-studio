@@ -32,7 +32,7 @@ IG_UNIFIED = "https://graph.facebook.com/v27.0"
 IG_UPLOAD = "https://rupload.facebook.com/ig-api-upload/v21.0"
 IG_SCOPES = "instagram_business_basic,instagram_business_content_publish"
 TT = "https://open.tiktokapis.com/v2"
-TT_SCOPES = "user.info.basic,video.publish"
+TT_SCOPES = "user.info.basic,video.publish,video.upload"
 PLATFORM_NAMES = {"youtube": "YouTube", "instagram": "Instagram", "tiktok": "TikTok"}
 
 
@@ -539,11 +539,12 @@ def _tt_tokens(form: dict) -> dict:
 
 def _tiktok_finish(code: str) -> dict:
     tok = _tt_tokens({"code": code, "grant_type": "authorization_code", "redirect_uri": redirect_for("tiktok")})
-    if "video.publish" not in str(tok.get("scope", "")):
-        raise ValueError("PeakCut needs permission to post videos. Connect again and allow posting.")
+    scope = str(tok.get("scope", ""))
+    if not any(s in scope.split(",") for s in ("video.publish", "video.upload")):
+        raise ValueError("PeakCut needs video upload permission. Connect TikTok again and allow uploading.")
     acc = {"id": f"tt_{tok['open_id']}", "platform": "tiktok", "name": "TikTok account", "added": time.time(),
            "open_id": tok["open_id"], "access_token": tok["access_token"], "refresh_token": tok["refresh_token"],
-           "expires": time.time() + int(tok.get("expires_in", 7200)) - 120}
+           "expires": time.time() + int(tok.get("expires_in", 7200)) - 120, "scope": scope}
     try:
         info = _tiktok_creator(acc)
         acc["name"] = "@" + info["creator_username"] if info.get("creator_username") else info.get("creator_nickname") or acc["name"]
@@ -586,7 +587,55 @@ def _tt_chunks(size: int) -> tuple:
     return 10_000_000, size // 10_000_000
 
 
-def tiktok_upload(acc, path: Path, caption: str, privacy: str = "public"):
+class TikTokSetupRequired(RuntimeError):
+    """A missing platform permission needs a person, not an automatic retry."""
+
+
+class TikTokInboxDelivered(Exception):
+    def __init__(self, publish_id, confirmed=True):
+        self.publish_id = publish_id
+        self.confirmed = confirmed
+        super().__init__("Uploaded to your TikTok inbox. Open TikTok to review and finish publishing; this is not a published post yet." if confirmed else "TikTok received the upload but inbox delivery is still processing. Check TikTok before trying another upload; this is not a published post.")
+
+
+def _tt_send_file(box, path):
+    size = path.stat().st_size
+    chunk, count = _tt_chunks(size)
+    with path.open("rb") as f:
+        for n in range(count):
+            first = n * chunk
+            last = size - 1 if n == count - 1 else first + chunk - 1
+            part = f.read(last - first + 1)
+            r = httpx.put(box["upload_url"], content=part, timeout=900, headers={
+                "Content-Type": "video/mp4", "Content-Length": str(len(part)), "Content-Range": f"bytes {first}-{last}/{size}"})
+            if r.status_code not in (200, 201, 206):
+                raise RuntimeError(f"Uploading to TikTok failed ({r.status_code}).")
+
+
+def tiktok_inbox_upload(acc, path):
+    if "video.upload" not in str(acc.get("scope", "")).split(","):
+        raise TikTokSetupRequired("TikTok blocks this app from direct posting to a public profile. Reconnect TikTok and allow video uploading to enable inbox delivery. Public Direct Post still needs TikTok review.")
+    size = path.stat().st_size
+    chunk, count = _tt_chunks(size)
+    box = _tt_post(acc, "/post/publish/inbox/video/init/", {
+        "source_info": {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk,
+                        "total_chunk_count": count}}, "Starting the TikTok inbox upload")
+    _tt_send_file(box, path)
+    for _ in range(120):
+        st = _tt_post(acc, "/post/publish/status/fetch/", {"publish_id": box["publish_id"]}, "Checking TikTok inbox delivery")
+        if st.get("status") == "SEND_TO_USER_INBOX":
+            raise TikTokInboxDelivered(box["publish_id"])
+        if st.get("status") == "PUBLISH_COMPLETE":
+            ids = st.get("publicaly_available_post_id") or st.get("publicly_available_post_id") or []
+            return str(ids[0]) if ids else box["publish_id"], ""
+        if st.get("status") == "FAILED":
+            raise RuntimeError("TikTok inbox upload failed: " + str(st.get("fail_reason") or "no reason given"))
+        time.sleep(5)
+    # Keep the remote ID so a slow response cannot cause a duplicate upload on retry.
+    raise TikTokInboxDelivered(box["publish_id"], confirmed=False)
+
+
+def _tiktok_direct_upload(acc, path: Path, caption: str, privacy: str = "public"):
     info = _tiktok_creator(acc)
     options = info.get("privacy_level_options") or ["SELF_ONLY"]
     level = next((p for p in TT_PRIVACY.get(privacy, ["SELF_ONLY"]) if p in options), "SELF_ONLY" if "SELF_ONLY" in options else options[0])
@@ -599,15 +648,7 @@ def tiktok_upload(acc, path: Path, caption: str, privacy: str = "public"):
                           "disable_stitch": False, "video_cover_timestamp_ms": 1000},
             "source_info": {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk, "total_chunk_count": count}},
             "Starting the TikTok post")
-    note = ""
-    try:
-        box = init(level)
-    except RuntimeError as e:
-        # A TikTok app that has not passed TikTok's review can only post privately: post privately, and say so.
-        if "unaudited" not in str(getattr(e, "code", "")) or level == "SELF_ONLY" or "SELF_ONLY" not in options:
-            raise
-        level, note = "SELF_ONLY", "Posted as private: this server's TikTok app hasn't passed TikTok's review yet."
-        box = init(level)
+    box = init(level)
     with path.open("rb") as f:
         for n in range(count):
             first = n * chunk
@@ -629,7 +670,16 @@ def tiktok_upload(acc, path: Path, caption: str, privacy: str = "public"):
     ids = st.get("publicaly_available_post_id") or st.get("publicly_available_post_id") or []
     user = info.get("creator_username") or ""
     url = f"https://www.tiktok.com/@{user}/video/{ids[0]}" if ids and user else ""
-    if note:
-        acc["detail"] = "Posts are private until this server's TikTok app is reviewed"
-        _put(acc)
     return str(ids[0]) if ids else box["publish_id"], url
+
+
+def tiktok_upload(acc, path: Path, caption: str, privacy: str = "public"):
+    """Public-profile fallback uploads a draft, without changing account privacy."""
+    if acc.get("scope") and "video.publish" not in acc["scope"].split(","):
+        return tiktok_inbox_upload(acc, path)
+    try:
+        return _tiktok_direct_upload(acc, path, caption, privacy)
+    except RuntimeError as e:
+        if "unaudited" not in str(getattr(e, "code", "")):
+            raise
+        return tiktok_inbox_upload(acc, path)

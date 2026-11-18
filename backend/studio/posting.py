@@ -38,13 +38,13 @@ def _mirror(p):
     job = jobs.get(p["job"])
     clip = next((c for c in job["clips"] if c["id"] == p["clip"]), None) if job else None
     if clip is not None:
-        clip.setdefault("posts", {})[p["id"]] = {k: p.get(k) for k in ("account_name", "platform", "status", "url", "due_at", "error")}
+        clip.setdefault("posts", {})[p["id"]] = {k: p.get(k) for k in ("account_name", "platform", "status", "url", "due_at", "error", "note")}
         jobs.save(job)
 
 
 def _next_slot(account_id, gap_min, cap):
     """Earliest time that respects the gap between posts and the daily cap for this account."""
-    mine = [p for p in _mine() if p["account"] == account_id and p["status"] in OPEN + ("posted",)]
+    mine = [p for p in _mine() if p["account"] == account_id and p["status"] in OPEN + ("posted", "needs_action")]
     t = max(time.time(), max((p.get("posted_at") or p["due_at"] for p in mine), default=0) + gap_min * 60)
     for _ in range(30):
         if sum(1 for p in mine if _day(p.get("posted_at") or p["due_at"]) == _day(t)) < cap:
@@ -63,7 +63,7 @@ def enqueue(job, clip, account_ids, now=False) -> list:
             if not acc:
                 continue
             if any(p["job"] == job["id"] and p["clip"] == clip["id"] and p["account"] == aid
-                   and p["status"] in OPEN + ("posted",) for p in _mine()):
+                   and p["status"] in OPEN + ("posted", "needs_action") for p in _mine()):
                 continue  # never post the same clip to the same account twice
             due = time.time() if now else _next_slot(aid, c["post_gap_min"], c["daily_cap"])
             p = {"id": secrets.token_hex(8), "user": ctx.uid(), "job": job["id"], "clip": clip["id"], "creator": job["creator"],
@@ -117,10 +117,14 @@ def _post(p):
             raise RuntimeError("That kind of account is no longer supported.")
         p.update(status="posted", posted_at=time.time(), remote_id=rid, url=url, error=None)
         creators.log(p["creator"], f"Posted to {acc['name']}: {title}")
+    except accounts.TikTokInboxDelivered as e:
+        p.update(status="needs_action", uploaded_at=time.time(), remote_id=e.publish_id, url="",
+                 error=None, note=str(e))
+        creators.log(p["creator"], "TikTok inbox upload delivered; open TikTok to finish publishing.")
     except Exception as e:  # noqa: BLE001
         p["tries"] += 1
         p["error"] = str(e)[-300:]
-        if p["tries"] < 3 and clip and acc:
+        if p["tries"] < 3 and clip and acc and not isinstance(e, accounts.TikTokSetupRequired):
             p.update(status="scheduled", due_at=time.time() + 600)  # try again in 10 minutes
         else:
             p["status"] = "failed"
@@ -214,10 +218,11 @@ def overview() -> dict:
             "posted_today": sum(1 for p in ps if p["status"] == "posted" and _day(p["posted_at"]) == today),
             "posted_total": sum(1 for p in ps if p["status"] == "posted"),
             "queued": sum(1 for p in ps if p["status"] in OPEN), "failed": sum(1 for p in ps if p["status"] == "failed"),
+            "drafts": sum(1 for p in ps if p["status"] == "needs_action"),
             "views": views, "earnings": round(views / 1000 * c["rate_per_1k"], 2)})
     names = {c["id"]: c["name"] for c in all_cs}
     queue = sorted((p for p in _posts if p["status"] in OPEN), key=lambda p: p["due_at"])
-    done = sorted((p for p in _posts if p["status"] in ("posted", "failed")), key=lambda p: -(p.get("posted_at") or p["due_at"]))[:15]
+    done = sorted((p for p in _posts if p["status"] in ("posted", "failed", "needs_action")), key=lambda p: -(p.get("posted_at") or p["due_at"]))[:15]
     show = [{**{k: v for k, v in p.items() if k != "user"}, "creator_name": names.get(p["creator"], "")} for p in queue + done]
     # last 14 days, oldest first, for the home graph
     days = [_day(time.time() - 86400 * i) for i in range(13, -1, -1)]

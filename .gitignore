@@ -13,3 +13,5 @@ backend/secrets/
 .engine-local.json
 .engine-pairing.json
 backend/.venv/
+.widget-connection.json
+.widget-connection.json.tmp

@@ -25,7 +25,7 @@ const guides = {
     url: "https://developers.tiktok.com/apps/",
     steps: [
       "Register a TikTok developer app. Add Login Kit and Content Posting API with Direct Post.",
-      "Request user.info.basic and video.publish. Register the HTTPS redirect address below.",
+      "Request user.info.basic, video.publish and video.upload. Register the HTTPS redirect address below. Reconnect an existing account to grant inbox-upload permission.",
       "Complete TikTok’s app review and audit for public direct posting.",
     ],
     note: "The free HTTPS callback returns sign-in to your paired local engine. Videos upload directly from your computer. TikTok still requires its developer-app review; unaudited apps are restricted to private posts.",
@@ -610,7 +610,7 @@ export function PublishingQueue({ overview, refresh, notify }) {
             <div>
               <strong>{p.title}</strong>
               <p>
-                {names[p.platform]} · {p.account_name} · {p.status}
+                {names[p.platform]} · {p.account_name} · {p.status === "needs_action" ? "Finish in TikTok" : p.status}
               </p>
               <small>
                 {p.status === "scheduled"
@@ -620,6 +620,7 @@ export function PublishingQueue({ overview, refresh, notify }) {
                     : ""}
               </small>
               {p.error && <p className="form-error">{p.error}</p>}
+              {p.note && <p>{p.note}</p>}
             </div>
             {p.url && (
               <a href={p.url} target="_blank" rel="noreferrer">
