@@ -36,3 +36,8 @@ test('account screen explains local HTTPS blockers and provides all platform set
  for(const name of ['YouTube','Instagram','TikTok','Facebook','Activate the free connection','Set up'])assert.ok(html.includes(name),name);
  assert.ok(!html.includes('Connect YouTube'));
 });
+test('posting calendar exposes navigation, per-platform filters, distinct stats and truthful draft labels',async()=>{
+ const mod=await server.ssrLoadModule('/src/PostingCalendar.jsx');const html=renderToStaticMarkup(createElement(mod.default,{}));
+ for(const text of ['Previous month','Next month','All platforms','YouTube','Instagram','TikTok','Facebook','Published','Generated','Unique clips to post','TikTok drafts','Cancelled queue entries are excluded'])assert.ok(html.includes(text),text);
+ assert.match(html,/aria-pressed/);assert.ok(!html.includes('undefined'));
+});

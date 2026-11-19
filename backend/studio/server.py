@@ -1303,6 +1303,15 @@ def overview():
     return posting.overview()
 
 
+@app.get("/api/posts/calendar")
+def posting_calendar(start: str, end: str, time_zone: str = "UTC"):
+    from . import calendar
+    try:
+        return calendar.read(start, end, time_zone)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/settings")
 def get_settings():
     return accounts.public_settings()

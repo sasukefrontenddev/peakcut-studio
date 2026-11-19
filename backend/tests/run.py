@@ -59,6 +59,7 @@ def main() -> int:
                 ("multilingual dialogue-based post text", ["tests/test_speechcopy.py"]),
                 ("audio-video sync and caption controls", ["tests/test_render_sync.py"]),
                 ("split live-input synchronization", ["tests/test_capture_sync.py"]),
+                ("posting calendar and per-day platform counts", ["tests/test_calendar.py"]),
                 ("the new-version notice", ["tests/test_updates.py"]),
                 ("no limits by default", ["tests/test_limits.py"]),
                 ("captions never overlap, stuck clips, sentence endings", ["tests/test_stuck.py"]),

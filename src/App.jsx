@@ -1,3 +1,4 @@
+import PostingCalendar from "./PostingCalendar";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
@@ -1118,6 +1119,7 @@ export default function App() {
                     title="Your publishing desk."
                     description="Post now, space out your queue, or automate each creator."
                   />
+                  <PostingCalendar revision={(overview?.posts?.map(p=>`${p.id}:${p.status}:${p.due_at}`).join('|')||'')+';'+(overview?.creators?.map(c=>c.clips_total).join('|')||'')} />
                   <PublishingQueue
                     overview={overview}
                     refresh={refresh}

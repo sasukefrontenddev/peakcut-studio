@@ -64,3 +64,16 @@ test('stale live signals cannot initiate recording',async()=>{
   const r=await fetch('http://127.0.0.1:'+server.address().port+'/control/creators/old/start',{method:'POST',headers:{Authorization:'Bearer control'}});assert.equal(r.status,409);
  }finally{await new Promise(r=>server.close(r));}
 });
+
+test('calendar is read-only, authenticated, constrained and forwards only calendar parameters',async()=>{
+ const calls=[];const server=createMonitor({token:'calendar-key',controlToken:'control-key',fetcher:async u=>{calls.push(u);return{ok:true,json:async()=>({start:'2026-11-01',posts:[],totals:{posted:0}})};}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base='http://127.0.0.1:'+server.address().port;
+ try{
+  const query='/calendar?start=2026-11-01&end=2026-12-01&time_zone=Asia%2FDubai';
+  assert.equal((await fetch(base+query)).status,401);assert.equal(calls.length,0);
+  assert.equal((await fetch(base+query,{headers:{Authorization:'Bearer calendar-key'}})).status,200);
+  assert.equal(calls[0].pathname,'/api/posts/calendar');assert.equal(calls[0].searchParams.get('time_zone'),'Asia/Dubai');
+  assert.equal((await fetch(base+query+'&url=https://example.com',{headers:{Authorization:'Bearer control-key'}})).status,400);
+  assert.equal((await fetch(base+query,{method:'POST',headers:{Authorization:'Bearer control-key'}})).status,404);
+ }finally{await new Promise(resolve=>server.close(resolve));server.closeAllConnections();}
+});

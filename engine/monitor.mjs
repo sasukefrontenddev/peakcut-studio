@@ -109,6 +109,18 @@ export function createMonitor({token, controlToken='', backendURL='http://127.0.
       }catch(e){res.writeHead(502,{'Content-Type':'application/json'}).end(JSON.stringify({error:e.message}));}
       finally{busy.delete(id);}return;
     }
+    if(req.method==='GET'&&req.url?.startsWith('/calendar?')){
+      if(!authorized(req.headers.authorization,controlToken)&&!authorized(req.headers.authorization,token)){res.writeHead(401).end();return;}
+      const query=new URL(req.url,'http://localhost').searchParams;
+      const start=query.get('start')||'',end=query.get('end')||'',zone=query.get('time_zone')||'UTC';
+      if([...query.keys()].some(k=>!['start','end','time_zone'].includes(k))||!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||!/^[-A-Za-z0-9_+/]{1,80}$/.test(zone)){
+        res.writeHead(400).end(JSON.stringify({error:'Choose valid calendar dates and a time zone.'}));return;
+      }
+      try{
+        const data=await engine('/api/posts/calendar?'+new URLSearchParams({start,end,time_zone:zone}));
+        res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(data));
+      }catch{res.writeHead(502,{'Content-Type':'application/json'}).end(JSON.stringify({error:'Calendar unavailable. Keep the local engine running.'}));}return;
+    }
     if(req.url!=='/status'||req.method!=='GET'){res.writeHead(404).end();return;}
     const controller=authorized(req.headers.authorization,controlToken);
     if(!controller&&!authorized(req.headers.authorization,token)){res.writeHead(401).end();return;}
