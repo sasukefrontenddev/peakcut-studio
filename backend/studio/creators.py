@@ -14,7 +14,7 @@ def _root() -> Path:
 
 _lock = threading.RLock()
 
-DEFAULTS = {"name": "", "channel": "", "style": "bounce", "layout": "blur", "captions": True, "caption_language": "auto", "min_len": 15, "max_len": 60,
+DEFAULTS = {"name": "", "channel": "", "style": "bounce", "layout": "blur", "captions": True, "caption_language": "auto", "selection_mode": "balanced", "min_len": 15, "max_len": 60,
             "max_clips": 6, "min_score": 80, "auto_watch": False, "buffer_min": 20, "live_per_hour": 4, "ai_every_min": 3, "ai_only_on_spike": True, "auto_jump_pct": 60,
             "plan": "free", "decide_mode": "both", "must_clip_min": 0, "min_gap_min": 2,
             "trigger_words": "clip that, clip it",
@@ -59,6 +59,9 @@ def _clean(data: dict) -> dict:
         if k in NUMERIC:
             lo, hi = NUMERIC[k]
             v = max(lo, min(hi, int(float(v))))
+        elif k == "selection_mode":
+            if v not in ("balanced", "landmarks"):
+                raise ValueError("Choose highlights or landmarks and first reveals.")
         elif k == "caption_language":
             if v not in ("auto", "en", "hi", "ur"):
                 raise ValueError("Choose automatic, English, Hindi or Urdu captions.")

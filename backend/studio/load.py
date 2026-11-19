@@ -4,6 +4,7 @@ Nothing here counts people. New heavy work (another video, another recording) st
 room, waits in line for a moment when it is nearly full, and is let through the second it frees up again. That is
 what keeps a rush from slowing everyone down or crashing the server."""
 import os
+import sys
 import shutil
 import threading
 import time
@@ -22,6 +23,11 @@ _lock = threading.Lock()
 
 def _cpu_times():
     """(busy, total) processor time so far, in any unit."""
+    if sys.platform == "darwin":
+        import psutil
+        times = psutil.cpu_times()
+        total = sum(times)
+        return total - times.idle - getattr(times, "iowait", 0), total
     if os.name == "nt":
         import ctypes
         from ctypes import wintypes
@@ -36,6 +42,9 @@ def _cpu_times():
 
 
 def _ram_free_gb() -> float:
+    if sys.platform == "darwin":
+        import psutil
+        return psutil.virtual_memory().available / 1e9
     if os.name == "nt":
         import ctypes
 

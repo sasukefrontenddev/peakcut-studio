@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import alerts, auth, brain, config, creators, ctx, jobs, load, media, transcribe, usage
+from . import alerts, auth, brain, config, creators, ctx, jobs, landmarks, load, media, transcribe, usage
 
 SESSIONS: dict = {}
 SEG_SEC = 6           # length of each buffer piece
@@ -116,6 +116,9 @@ class Session:
         self.user_stopped = False     # Stop pressed: wrap up at once, no last AI check
         self.proc = None
         self.pending = bytearray()    # audio received but not yet transcribed
+        self.vision_range = None
+        self.last_vision = 0.0
+        self.analysis_range = None
         self.clock_fix = 0.0          # how far the video-piece clock is behind the audio clock, last measured
         self.pending_base = 0         # sample index where `pending` starts
         self.samples = 0              # total audio samples received
@@ -153,6 +156,7 @@ class Session:
         SESSIONS[self.job["id"]] = self
         threading.Thread(target=ctx.bind(self._ingest), daemon=True).start()
         threading.Thread(target=ctx.bind(self._analyze), daemon=True).start()
+        threading.Thread(target=ctx.bind(self._vision_watch), daemon=True).start()
         m = re.match(r"^https?://(?:www\.)?twitch\.tv/([A-Za-z0-9_]+)", self.job["source"]["url"])
         if m:
             threading.Thread(target=ctx.bind(self._chat), args=(m.group(1).lower(),), daemon=True).start()
@@ -236,8 +240,74 @@ class Session:
                     self.seg_clock += dur
                 self.csv_seen[i] = len(rows)
             keep_from = self.seg_clock - self.settings["buffer_min"] * 60
-            while self.segments and self.segments[0][2] < keep_from:
-                self.segments.pop(0)[0].unlink(missing_ok=True)
+            # Queued captions may wait longer than the rolling buffer. Keep only the pieces
+            # those clips (or an in-flight scout request) still need, not an entire old buffer.
+            protected = [(c["start"] - PAD - self.clock_fix, c["end"] + PAD - self.clock_fix)
+                         for c in self.job["clips"] if c.get("status") in ("queued", "rendering")
+                         and not (c.get("src") and Path(c["src"]).exists())]
+            if self.analysis_range:
+                protected.append((self.analysis_range[0] - PAD - self.clock_fix,
+                                  self.analysis_range[1] + PAD - self.clock_fix))
+            if self.vision_range:
+                protected.append(self.vision_range)
+            kept = []
+            for piece in self.segments:
+                if piece[2] >= keep_from or any(piece[2] > a and piece[1] < b for a, b in protected):
+                    kept.append(piece)
+                else:
+                    piece[0].unlink(missing_ok=True)
+            self.segments = kept
+
+    def _vision_watch(self):
+        while not self.stop_flag.wait(15) and not self.ended:
+            if self.settings.get("selection_mode") != "landmarks" or not landmarks.available():
+                continue
+            if self.seg_clock - self.last_vision < 90 or load.busy():
+                continue
+            try:
+                self._vision_step()
+            except Exception as e:
+                self.job["vision_note"] = "Local visual check waiting: " + str(e)[:150]
+                self.last_vision = self.seg_clock
+                jobs.save(self.job)
+
+    def _vision_step(self):
+        self._scan_segments()
+        with self.lock:
+            times = [self.seg_clock - 17, self.seg_clock - 3]
+            pieces = [next((p for p in self.segments if p[1] <= t < p[2] and p[0].exists()), None) for t in times]
+            if not all(pieces):
+                return
+            self.vision_range = (times[0] - PAD, times[-1] + 25)
+        try:
+            images = []
+            for piece, t in zip(pieces, times):
+                result = subprocess.run(["ffmpeg", "-v", "error", "-ss", str(t-piece[1]), "-i", str(piece[0]),
+                    "-frames:v", "1", "-vf", "scale=384:-2", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"],
+                    capture_output=True, timeout=25, creationflags=media.NO_WINDOW)
+                if result.returncode or not result.stdout:
+                    return
+                images.append(result.stdout)
+            observation = landmarks.detect(images)
+            self.last_vision = self.seg_clock
+            if self.stop_flag.is_set() or self.ended:
+                return
+            seen = self.job.setdefault("landmarks_seen", {})
+            c = landmarks.candidate(observation, times[0]+self.clock_fix, seen, self.settings["min_len"], self.settings["max_len"])
+            if not c:
+                self.job["vision_note"] = "No new, clearly confirmed major reveal in the latest frames."
+                jobs.save(self.job)
+                return
+            folder = self.dir / "landmark-evidence"
+            folder.mkdir(exist_ok=True)
+            for i, data in enumerate(images):
+                (folder / f"{c['visual_landmark']}-{i}.jpg").write_bytes(data)
+            seen[c["visual_landmark"]] = {"at":c["visual_at"], "evidence":c["visual_evidence"]}
+            self.job["vision_note"] = "Confirmed new reveal: " + landmarks.NAMES[c["visual_landmark"]]
+            self._add_clip(c)
+        finally:
+            with self.lock:
+                self.vision_range = None
 
     # ---------------------------------------------------------------- chat (Twitch only)
     def _chat(self, channel):
@@ -282,6 +352,12 @@ class Session:
 
     # ---------------------------------------------------------------- analysis
     def _transcribe_step(self):
+        if self.settings.get("selection_mode") == "landmarks":
+            with self.lock:
+                self.pending.clear()
+                self.pending_base = self.samples
+                self.t_done = self.samples / SR
+            return False
         with self.lock:
             n = len(self.pending) // 2
             hurry = self.ended or bool(self.manual)
@@ -289,6 +365,17 @@ class Session:
                 return False
             audio = np.frombuffer(bytes(self.pending[: n * 2]), dtype=np.int16)
             base = self.pending_base
+            if self.segments:
+                recent = [p for p in self.segments if p[2] >= self.seg_clock - self.settings["buffer_min"] * 60]
+                first = recent[0][1] if recent else self.seg_clock
+                earliest = first + self.clock_fix + (PAD if first > 0 else 0)
+                stale = max(0, min(n, int(earliest * SR) - base))
+                if stale:
+                    del self.pending[:stale * 2]
+                    self.pending_base += stale
+                    self.t_done = self.pending_base / SR
+                    self.job["live_note"] = "Skipped audio whose source footage expired; catching up to the available buffer."
+                    return True
         cut = n
         if not hurry or n > SR * 24:
             # cut at the quietest moment between 4 and 6.5 s, so no word is split; the rest waits for the next pass
@@ -342,6 +429,19 @@ class Session:
             self.spikes += 1
 
     def _ai_check(self, window=None, why=None):
+        if self.settings.get("selection_mode") == "landmarks":
+            self.last_check = self.t_done
+            return
+        every = max(int(self.settings.get("ai_every_min", 3)), 3)
+        with self.lock:
+            self.analysis_range = window or (max(0.0, self.t_done - every * 60 - 90), self.t_done)
+        try:
+            return self._judge_moment(window, why)
+        finally:
+            with self.lock:
+                self.analysis_range = None
+
+    def _judge_moment(self, window=None, why=None):
         """Judge 1 reads only the words. If it finds a moment, judge 2 reads only the loudness and chat activity
         for the same stretch, without seeing the words. A clip is made when both say yes (or as set in Setup)."""
         st = self.settings
@@ -453,8 +553,10 @@ class Session:
             self._add_clip(c)
 
     def _add_clip(self, c):
-        self.n += 1
-        c.update(id=f"clip{self.n:03d}", style=self.settings["style"], layout=self.settings["layout"], captions=self.settings.get("captions", True), caption_language=self.settings.get("caption_language", "auto"),
+        with self.lock:
+            self.n += 1
+            number = self.n
+        c.update(id=f"clip{number:03d}", style=self.settings["style"], layout=self.settings["layout"], captions=self.settings.get("captions", True), caption_language=self.settings.get("caption_language", "auto"),
                  status="queued", version=0, made_at=time.time())
         with self.lock:
             self.job["clips"].append(c)
@@ -463,16 +565,25 @@ class Session:
 
     def _render(self, clip):
         """Runs on the render worker: copy the needed buffer pieces, then make the clip."""
+        if clip.get("src") and Path(clip["src"]).is_file():
+            return jobs.render_one(self.job, clip, list(self.words))
         deadline = time.time() + 45
         while time.time() < deadline:
             self._scan_segments()
-            if self.ended or (self.segments and self.segments[-1][2] >= clip["end"] + 1):
+            if self.ended or (self.segments and self.segments[-1][2] >= clip["end"] - self.clock_fix + 1):
                 break
             time.sleep(1)
         with self.lock:
-            segs = [s for s in self.segments if s[2] > clip["start"] - PAD and s[1] < clip["end"] + PAD and s[0].exists()]
-        if not segs or segs[0][1] > clip["start"] + 2:
-            clip.update(status="error", error="That part of the stream is no longer in the buffer.")
+            segs = [s for s in self.segments if s[2] > clip["start"] - self.clock_fix - PAD and s[1] < clip["end"] - self.clock_fix + PAD and s[0].exists()]
+        # Check coverage across the requested span, including holes between retained pieces.
+        covered = clip["start"] - self.clock_fix
+        for piece in segs:
+            if piece[1] > covered + 0.25:
+                break
+            covered = max(covered, piece[2])
+        if not segs or covered < clip["end"] - self.clock_fix - 0.25:
+            clip.update(status="error", error_kind="source_expired", retryable=False,
+                        error="The original stream footage expired before this clip was saved. It cannot be remade from the remaining buffer.")
             jobs.save(self.job)
             return
         if "width" not in self.job:
@@ -544,7 +655,8 @@ class Session:
                       "rejected": self.rejected, "verdicts": list(reversed(self.verdicts)),
                       "every_min": int(self.settings.get("ai_every_min", 3)) or 3,
                       "auto": None,
-                      "pending_clips": len(self.manual)})
+                      "pending_clips": len(self.manual), "selection_mode": self.settings.get("selection_mode", "balanced"),
+                      "vision_note": self.job.get("vision_note", ""), "analysis_note": self.job.get("live_note", "")})
         jobs.save(self.job)
 
     def _analyze(self):

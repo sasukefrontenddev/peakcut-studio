@@ -89,6 +89,8 @@ def on_clip_ready(job, clip):
     c = creators.get(job["creator"])
     if not c or not c["autopost"] or not c["accounts"]:
         return
+    if c.get("selection_mode") == "landmarks" and clip.get("selection_source") != "visual-landmark":
+        return  # older reaction clips may finish after a restart; do not refill the first-reveal queue
     if clip.get("score", 0) < c["post_min_score"]:
         return  # includes hand-made clips (score 0): those wait for you to press Post
     made = enqueue(job, clip, c["accounts"])

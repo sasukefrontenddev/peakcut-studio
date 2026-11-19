@@ -108,6 +108,8 @@ if (!(await ready())) {
       PEAKCUT_JOB_WORKERS: "1",
       ...(local.data ? { PEAKCUT_DATA: local.data } : {}),
       ...(local.models ? { PEAKCUT_MODELS: local.models } : {}),
+      ...(local.facebookPageId ? {PEAKCUT_FACEBOOK_PAGE_ID:local.facebookPageId} : {}),
+      ...(local.visionModel ? {PEAKCUT_VISION_MODEL:local.visionModel} : {}),
       ...(local.captionPython ? {PEAKCUT_CAPTION_PYTHON:local.captionPython, PEAKCUT_CAPTION_MODEL:local.captionModel} : {}),
       ...(local.ffmpeg ? { PEAKCUT_FFMPEG_DIR: local.ffmpeg } : {}),
     },

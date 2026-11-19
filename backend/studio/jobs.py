@@ -155,6 +155,11 @@ def public(job) -> dict:
     out = {k: v for k, v in job.items() if k not in HIDDEN}
     out["source"] = {k: v for k, v in job["source"].items() if k != "path"}
     out["clips"] = [{k: v for k, v in c.items() if k not in ("src", "fixed_words", "fixed_for", "speech_words", "speech_for", "post_copy_evidence")} for c in job["clips"]]
+    for clip in out["clips"]:
+        if clip.get("status") == "error" and (clip.get("error_kind") == "source_expired" or
+                "no longer in the buffer" in str(clip.get("error", ""))):
+            clip.update(error_kind="source_expired", retryable=False,
+                        error="The original footage expired before this clip was saved. It cannot be remade from the remaining buffer.")
     ai = job.get("ai") or {}
     out["ai"] = {"tokens": ai.get("tokens", 0), "note": ai.get("note", ""), "used": bool(ai.get("model"))}   # never the model, never raw errors
     if job.get("status") == "queued":
@@ -344,6 +349,8 @@ def delete(jid):
 def request_render(jid, cid, changes: dict):
     job = _jobs[jid]
     clip = next(c for c in job["clips"] if c["id"] == cid)
+    if job.get("kind") == "live" and (not clip.get("src") or not Path(clip["src"]).is_file()):
+        raise ValueError("The saved stream footage for this clip is unavailable. Re-making it cannot restore expired source footage.")
     new = dict(clip)
     for k in ("start", "end"):
         if k in changes:
@@ -387,6 +394,11 @@ def ground_post(job, clip):
         clip.update(speech_words=heard, speech_for=span, speech_language=detected)
     heard = clip.get("speech_words", [])
     mark = speechcopy.fingerprint(heard, clip.get("speech_language", language))
+    if (clip.get("selection_source") == "visual-landmark" and
+            clip["start"] <= clip.get("visual_at", -1) <= clip["end"]):
+        clip.update(post_copy_source="visual-landmark", post_copy_for=mark,
+                    post_copy_note="Scene-based description confirmed from two frames; first detection in this recording.")
+        return heard
     if clip.get("post_copy_for") != mark:
         clip.update(speechcopy.build(heard, clip.get("speech_language", language)), post_copy_for=mark)
     return heard

@@ -41,3 +41,8 @@ test('posting calendar exposes navigation, per-platform filters, distinct stats 
  for(const text of ['Previous month','Next month','All platforms','YouTube','Instagram','TikTok','Facebook','Published','Generated','Unique clips to post','TikTok drafts','Cancelled queue entries are excluded'])assert.ok(html.includes(text),text);
  assert.match(html,/aria-pressed/);assert.ok(!html.includes('undefined'));
 });
+
+test('expired source clips explain the failure and do not offer impossible edit or publish actions',()=>{
+ const html=render('ClipActions',{clip:{id:'expired',status:'error',retryable:false,error:'Original footage expired.'},job:{id:'job'},accounts:[]});
+ assert.match(html,/Original footage expired/);assert.match(html,/disabled=""[^>]*>Edit clip/);
+});

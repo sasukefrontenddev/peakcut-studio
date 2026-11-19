@@ -193,7 +193,7 @@ def connect_url(platform: str) -> str:
             "client_id": cid, "redirect_uri": redirect, "response_type": "code", "scope": YT_SCOPES,
             "access_type": "offline", "prompt": "consent", "state": state})
     if platform == "facebook":
-        options = {"client_id": cid, "redirect_uri": redirect, "response_type": "code", "state": state}
+        options = {"client_id": cid, "redirect_uri": redirect, "response_type": "code", "state": state, "auth_type": "rerequest"}
         config_id = (_apps_saved().get("facebook") or {}).get("config_id")
         options.update({"config_id": config_id} if config_id else {"scope": FB_SCOPES})
         return "https://www.facebook.com/v27.0/dialog/oauth?" + urlencode(options)
@@ -719,10 +719,14 @@ def _facebook_finish(code):
         after = (paging.get("cursors") or {}).get("after", "")
         if not paging.get("next") or not after:
             break
-    allowed = [p for p in pages if set(p.get("tasks") or []) & {"CREATE_CONTENT", "MANAGE", "PROFILE_PLUS_CREATE_CONTENT"}
+    allowed = [p for p in pages if set(p.get("tasks") or []) & {"CREATE_CONTENT", "MANAGE", "PROFILE_PLUS_CREATE_CONTENT", "PROFILE_PLUS_FULL_CONTROL", "PROFILE_PLUS_MANAGE"}
                and re.fullmatch(r"[0-9]+", str(p.get("id", ""))) and p.get("access_token")]
+    target = config.env("PEAKCUT_FACEBOOK_PAGE_ID")
+    if target:
+        allowed = [p for p in allowed if str(p["id"]) == target]
     if not allowed:
-        raise ValueError("No publishable Facebook Page was shared. Connect again, select your Page and allow content publishing.")
+        raise ValueError("Facebook shared no Pages. Connect again and select gamestoptv.official in Meta's Page permissions." if not pages else
+                         "Facebook shared Pages but none had content-publishing access. Check your Page's full-control/content access and connect again.")
     saved = []
     for page in allowed:
         acc = {"id": "fb_" + page["id"], "platform": "facebook", "name": str(page["name"])[:100],

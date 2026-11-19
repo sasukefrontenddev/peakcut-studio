@@ -392,16 +392,19 @@ export function ClipActions({ clip, job, accounts, refresh, notify }) {
   const posts = Object.entries(clip.posts || {});
   return (
     <div className="feature-stack">
+      {clip.error && <p className="form-error" role="alert">{clip.error}</p>}
       {clip.caption_note && <p className="muted">{clip.caption_note}</p>}
       <div className="feature-actions">
         <button
           className="button outline"
+          disabled={clip.retryable === false}
           onClick={() => setMode(mode === "edit" ? "" : "edit")}
         >
           Edit clip
         </button>
         <button
           className="button"
+          disabled={clip.status !== "done"}
           onClick={() => setMode(mode === "post" ? "" : "post")}
         >
           Publish clip
@@ -865,6 +868,13 @@ export function CreatorSettings({ creator, accounts, refresh, notify }) {
           {label}
         </label>
       ))}
+      <label>Moment selection
+        <select value={form.selection_mode || "balanced"} onChange={e=>field("selection_mode",e.target.value)}>
+          <option value="balanced">Reactions and highlights</option>
+          <option value="landmarks">Landmarks and first reveals</option>
+        </select>
+        <small>First reveals use the local vision model, require two confirming frames and skip repeat landmarks within a recording. Quiet reveals can qualify.</small>
+      </label>
       <label>Caption speech language
         <select value={form.caption_language || "auto"} onChange={e=>field("caption_language",e.target.value)}>
           <option value="auto">Detect automatically</option><option value="en">English</option><option value="hi">Hindi / Hinglish</option><option value="ur">Urdu</option>

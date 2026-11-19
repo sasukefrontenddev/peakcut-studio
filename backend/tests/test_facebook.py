@@ -61,3 +61,19 @@ with ctx.as_user(u.id):
   assert made[0]['due_at']>now+86000
  print('PASS Facebook rolling 30-Reel limit also applies to immediate queue requests')
 print('ALL FACEBOOK CHECKS PASSED')
+
+with ctx.as_user(u.id),patch.object(accounts,'app_keys',return_value=('app-12345','app-secret')):
+ for task in ['PROFILE_PLUS_FULL_CONTROL','PROFILE_PLUS_MANAGE','PROFILE_PLUS_CREATE_CONTENT']:
+  def modern(url,**kw):
+   if url.endswith('/oauth/access_token'):return reply({'access_token':'private-user-token'})
+   return reply({'data':[{'id':'1399851063212599','name':'Game Stop TV','tasks':[task],'access_token':'private-page-token'}]})
+  with patch.object(accounts.httpx,'get',side_effect=modern):
+   result=accounts._facebook_finish('one-time-code');assert result['page_id']=='1399851063212599'
+print('PASS modern Facebook Page full-control and content-publishing task names')
+with ctx.as_user(u.id),patch.object(accounts,'app_keys',return_value=('app-12345','app-secret')),patch.dict(os.environ,{'PEAKCUT_FACEBOOK_PAGE_ID':'1399851063212599'}):
+ def selected(url,**kw):
+  if url.endswith('/oauth/access_token'):return reply({'access_token':'private-user-token'})
+  return reply({'data':[{'id':'99999','name':'Unrelated Page','tasks':['MANAGE'],'access_token':'do-not-save'}, {'id':'1399851063212599','name':'Game Stop TV','tasks':['PROFILE_PLUS_FULL_CONTROL'],'access_token':'private-page-token'}]})
+ with patch.object(accounts.httpx,'get',side_effect=selected),patch.object(accounts,'_put') as put:
+  result=accounts._facebook_finish('one-time-code');assert result['page_id']=='1399851063212599' and put.call_count==1
+print('PASS configured target Page excludes unrelated managed businesses')

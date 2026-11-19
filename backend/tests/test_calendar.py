@@ -11,7 +11,7 @@ def ts(s):return datetime.fromisoformat(s).replace(tzinfo=timezone.utc).timestam
 base={'user':owner.id,'job':'j','clip':'c','creator':'creator','title':'Safe title','account_name':'Channel','platform':'youtube','status':'scheduled','due_at':ts('2026-11-18T21:00:00')}
 rows=[dict(base,id=str(i),clip='c'+str(i),status='posted',posted_at=ts('2026-11-18T20:30:00')) for i in range(22)]
 rows += [dict(base,id='multi-ig',clip='c0',platform='instagram',status='posted',posted_at=ts('2026-11-18T20:30:00')),dict(base,id='draft',status='needs_action',uploaded_at=ts('2026-11-19T05:00:00')),dict(base,id='cancel',status='cancelled'),dict(base,id='foreign',user='another-owner'),dict(base,id='scheduled'),dict(base,id='failed',status='failed')]
-with ctx.as_user(owner.id),patch.object(posting,'_posts',rows),patch.object(creators,'all_creators',return_value=[{'id':'creator','name':'Creator'}]),patch.object(jobs,'list_jobs',return_value=[{'clips':[{'made_at':ts('2026-11-18T21:00:00')}]}]):
+with ctx.as_user(owner.id),patch.object(posting,'_posts',rows),patch.object(creators,'all_creators',return_value=[{'id':'creator','name':'Creator'}]),patch.object(jobs,'list_jobs',return_value=[{'clips':[{'status':'done','made_at':ts('2026-11-18T21:00:00')},{'status':'error','made_at':ts('2026-11-18T21:00:00')},{'status':'queued','made_at':ts('2026-11-18T21:00:00')}]}]):
  d=calendar.read('2026-11-01','2026-12-01','Asia/Dubai')
  assert len(d['posts'])==26,len(d['posts'])
  assert d['totals']['posted']==23 and d['totals']['needs_action']==1 and d['totals']['scheduled']==1 and d['totals']['failed']==1

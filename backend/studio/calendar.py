@@ -32,7 +32,7 @@ def read(start, end, time_zone='UTC'):
     for job in jobs.list_jobs():
         for clip in job.get('clips', []):
             at = clip.get('made_at') or 0
-            if lo <= at < hi:
+            if (clip.get('status') == 'done' or clip.get('version', 0) > 0) and lo <= at < hi:
                 day = datetime.fromtimestamp(at, zone).date().isoformat()
                 generated[day] = generated.get(day, 0) + 1
     days = []

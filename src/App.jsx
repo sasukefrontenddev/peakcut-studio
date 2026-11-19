@@ -1004,6 +1004,7 @@ export default function App() {
                             <div>
                               <strong>{c.name}</strong>
                               <p>{c.channel}</p>
+                              {c.selection_mode === "landmarks" && <p>First-reveal scout · {c.live_job ? (data.jobs?.find(j=>j.id===c.live_job)?.live?.vision_note || "Watching for a clear new landmark") : "Ready when recording starts"}</p>}
                             </div>
                             <Pill tone={c.live_job ? "green" : ""}>
                               {c.live_job ? "Recording" : "Not recording"}
