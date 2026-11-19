@@ -13,6 +13,10 @@ hotels and major vehicles. Each category is selected once per recording. It mean
 sampling and a small local model can miss fast events or misclassify scenes; evidence
 frames are retained privately in each recording's `landmark-evidence` folder.
 
+The two chronological frames are combined into a compact contact sheet for one local
+image evaluation. A street-scene CPU check took about a minute on the test Mac; checks
+are periodic, not instant.
+
 The selected clip contains context before the observed reveal and a short continuation.
 The actual clip audio still gets the local multilingual subtitle pass. The verified
 scene description is kept even if spoken dialogue happens to concern another subject.
